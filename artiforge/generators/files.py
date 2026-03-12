@@ -100,7 +100,7 @@ def _gen_inf(spec: FileArtifactSpec, phase: Phase) -> GeneratedFile:
 # ── XML Task Definition (disguised as .txt) ───────────────────────────────────
 
 _XML_TASK_CONTENT = """\
-<?xml version="1.0" encoding="UTF-16"?>
+<?xml version="1.0" encoding="UTF-8"?>
 <Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
   <RegistrationInfo>
     <Description>Keeps your Microsoft Edge browser up to date.</Description>
