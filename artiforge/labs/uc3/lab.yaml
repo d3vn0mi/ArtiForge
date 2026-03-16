@@ -444,10 +444,10 @@ attack:
             DestinationPort: 443
             DestinationPortName: https
 
-        # Application 1 — Cloudflared startup error in Application log
+        # Application 1 — Cloudflared error after all 5 retry attempts exhausted
         - channel: Application
           eid: 1
-          offset_seconds: 22
+          offset_seconds: 170
           fields:
             Data: >
               2026-02-19T10:42:22Z ERR Failed to create tunnel
