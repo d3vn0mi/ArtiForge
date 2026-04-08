@@ -152,3 +152,63 @@ def test_generate_ndjson_valid(runner, tmp_path):
     ndjson = (run_dir / "elastic" / "bulk_import.ndjson").read_text()
     for line in ndjson.strip().splitlines():
         json.loads(line)   # raises if invalid
+
+
+def test_generate_dry_run_no_files(runner, tmp_path):
+    result = runner.invoke(main, ["generate", "--lab", "uc3",
+                                   "--output", str(tmp_path), "--dry-run"])
+    assert result.exit_code == 0
+    assert "dry-run" in result.output.lower()
+    assert "no files written" in result.output.lower()
+    assert list(tmp_path.iterdir()) == []   # nothing written
+
+
+def test_generate_dry_run_shows_summary(runner, tmp_path):
+    result = runner.invoke(main, ["generate", "--lab", "uc3",
+                                   "--output", str(tmp_path), "--dry-run"])
+    assert "40" in result.output    # event count
+    assert "T+" in result.output    # phase offsets shown
+
+
+def test_generate_lab_path(runner, tmp_path):
+    import os
+    lab_yaml = os.path.join(os.path.dirname(__file__), "..", "artiforge", "labs", "uc3", "lab.yaml")
+    result = runner.invoke(main, ["generate", "--lab-path", lab_yaml,
+                                   "--output", str(tmp_path)])
+    assert result.exit_code == 0
+    assert len(list(tmp_path.glob("uc3_*"))) == 1
+
+
+# ── validate ─────────────────────────────────────────────────────────────────
+
+def test_validate_uc3_passes(runner):
+    result = runner.invoke(main, ["validate", "--lab", "uc3"])
+    assert result.exit_code == 0
+    assert "valid" in result.output.lower()
+
+
+def test_validate_unknown_lab_fails(runner):
+    result = runner.invoke(main, ["validate", "--lab", "nonexistent_xyz"])
+    assert result.exit_code != 0
+
+
+def test_validate_no_args_fails(runner):
+    result = runner.invoke(main, ["validate"])
+    assert result.exit_code != 0
+
+
+# ── schema ───────────────────────────────────────────────────────────────────
+
+def test_schema_prints_json(runner):
+    result = runner.invoke(main, ["schema"])
+    assert result.exit_code == 0
+    parsed = json.loads(result.output)
+    assert "properties" in parsed or "$defs" in parsed
+
+
+def test_schema_writes_file(runner, tmp_path):
+    out = tmp_path / "schema.json"
+    result = runner.invoke(main, ["schema", "--output", str(out)])
+    assert result.exit_code == 0
+    assert out.exists()
+    json.loads(out.read_text())   # must be valid JSON

@@ -1,0 +1,369 @@
+{
+  "$defs": {
+    "AttackSpec": {
+      "properties": {
+        "base_time": {
+          "format": "date-time",
+          "title": "Base Time",
+          "type": "string"
+        },
+        "malicious_account": {
+          "default": "svc_backup_admin",
+          "title": "Malicious Account",
+          "type": "string"
+        },
+        "phases": {
+          "items": {
+            "$ref": "#/$defs/Phase"
+          },
+          "title": "Phases",
+          "type": "array"
+        }
+      },
+      "required": [
+        "base_time"
+      ],
+      "title": "AttackSpec",
+      "type": "object"
+    },
+    "EventSpec": {
+      "description": "A single event to generate, as declared in the YAML.",
+      "properties": {
+        "channel": {
+          "title": "Channel",
+          "type": "string"
+        },
+        "eid": {
+          "title": "Eid",
+          "type": "integer"
+        },
+        "offset_seconds": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Offset Seconds",
+          "type": "integer"
+        },
+        "host": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Host"
+        },
+        "user": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "User"
+        },
+        "provider": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Provider"
+        },
+        "fields": {
+          "additionalProperties": true,
+          "title": "Fields",
+          "type": "object"
+        },
+        "repeat": {
+          "default": 1,
+          "minimum": 1,
+          "title": "Repeat",
+          "type": "integer"
+        },
+        "repeat_gap_seconds": {
+          "default": 30,
+          "minimum": 0,
+          "title": "Repeat Gap Seconds",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "channel",
+        "eid"
+      ],
+      "title": "EventSpec",
+      "type": "object"
+    },
+    "FileArtifactSpec": {
+      "description": "A file to generate on disk as part of the lab staging.",
+      "properties": {
+        "type": {
+          "enum": [
+            "lnk",
+            "xsl",
+            "inf",
+            "xml_task",
+            "binary_placeholder",
+            "raw"
+          ],
+          "title": "Type",
+          "type": "string"
+        },
+        "dest": {
+          "title": "Dest",
+          "type": "string"
+        },
+        "content_template": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Content Template"
+        },
+        "lnk_target": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Lnk Target"
+        },
+        "lnk_args": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Lnk Args"
+        }
+      },
+      "required": [
+        "type",
+        "dest"
+      ],
+      "title": "FileArtifactSpec",
+      "type": "object"
+    },
+    "Host": {
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "ip": {
+          "title": "Ip",
+          "type": "string"
+        },
+        "fqdn": {
+          "title": "Fqdn",
+          "type": "string"
+        },
+        "os": {
+          "default": "Windows 10",
+          "title": "Os",
+          "type": "string"
+        },
+        "sid_prefix": {
+          "default": "S-1-5-21-1111111111-2222222222-3333333333",
+          "title": "Sid Prefix",
+          "type": "string"
+        },
+        "users": {
+          "items": {
+            "$ref": "#/$defs/User"
+          },
+          "title": "Users",
+          "type": "array"
+        }
+      },
+      "required": [
+        "name",
+        "ip",
+        "fqdn"
+      ],
+      "title": "Host",
+      "type": "object"
+    },
+    "Infrastructure": {
+      "properties": {
+        "domain": {
+          "title": "Domain",
+          "type": "string"
+        },
+        "hosts": {
+          "additionalProperties": {
+            "$ref": "#/$defs/Host"
+          },
+          "title": "Hosts",
+          "type": "object"
+        }
+      },
+      "required": [
+        "domain",
+        "hosts"
+      ],
+      "title": "Infrastructure",
+      "type": "object"
+    },
+    "LabMeta": {
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "description": {
+          "default": "",
+          "title": "Description",
+          "type": "string"
+        },
+        "mitre_version": {
+          "default": "v14",
+          "title": "Mitre Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ],
+      "title": "LabMeta",
+      "type": "object"
+    },
+    "Phase": {
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "integer"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "mitre": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Mitre",
+          "type": "array"
+        },
+        "offset_minutes": {
+          "default": 0,
+          "title": "Offset Minutes",
+          "type": "integer"
+        },
+        "host": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Host"
+        },
+        "user": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "User"
+        },
+        "events": {
+          "items": {
+            "$ref": "#/$defs/EventSpec"
+          },
+          "title": "Events",
+          "type": "array"
+        },
+        "file_artifacts": {
+          "items": {
+            "$ref": "#/$defs/FileArtifactSpec"
+          },
+          "title": "File Artifacts",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ],
+      "title": "Phase",
+      "type": "object"
+    },
+    "User": {
+      "properties": {
+        "username": {
+          "title": "Username",
+          "type": "string"
+        },
+        "domain": {
+          "title": "Domain",
+          "type": "string"
+        },
+        "rid": {
+          "default": 1001,
+          "title": "Rid",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "username",
+        "domain"
+      ],
+      "title": "User",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "lab": {
+      "$ref": "#/$defs/LabMeta"
+    },
+    "infrastructure": {
+      "$ref": "#/$defs/Infrastructure"
+    },
+    "attack": {
+      "$ref": "#/$defs/AttackSpec"
+    }
+  },
+  "required": [
+    "lab",
+    "infrastructure",
+    "attack"
+  ],
+  "title": "LabSpec",
+  "type": "object"
+}

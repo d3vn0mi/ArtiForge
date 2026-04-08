@@ -19,11 +19,24 @@ artiforge list-labs
 # Generate all UC3 artifacts (XML + Elastic NDJSON)
 artiforge generate --lab uc3
 
+# Preview what would be generated (no files written)
+artiforge generate --lab uc3 --dry-run
+
 # Selective phases only
 artiforge generate --lab uc3 --phases 1,4 --output ./test_out
 
 # Custom base timestamp
 artiforge generate --lab uc3 --base-time "2026-03-01T08:00:00Z"
+
+# Use a lab YAML outside the built-in labs directory
+artiforge generate --lab-path /home/analyst/mylab/lab.yaml
+
+# Validate a lab before generating
+artiforge validate --lab uc3
+artiforge validate --lab-path /home/analyst/mylab/lab.yaml
+
+# Print the JSON Schema for IDE autocompletion
+artiforge schema --output artiforge/labs/lab.schema.json
 ```
 
 ---
@@ -62,11 +75,30 @@ artifacts/
 
 ## Adding a New Lab
 
-1. Create `artiforge/labs/<your-lab-id>/lab.yaml`
-2. Follow the schema from `artiforge/labs/uc3/lab.yaml`
-3. Run `artiforge list-labs` — your lab appears automatically
+1. Create your `lab.yaml` anywhere — no need to place it inside the package:
+   ```bash
+   mkdir ~/mylab && cp artiforge/labs/uc3/lab.yaml ~/mylab/lab.yaml
+   # edit ~/mylab/lab.yaml
+   artiforge validate --lab-path ~/mylab/lab.yaml
+   artiforge generate --lab-path ~/mylab/lab.yaml
+   ```
+2. For IDE autocompletion, run `artiforge schema -o artiforge/labs/lab.schema.json`
+   and install the Red Hat YAML extension — every field will autocomplete inline.
+3. Run `artiforge validate` before generating to catch schema and EID errors early.
 
-No Python code changes required for YAML-only labs.
+**No Python code changes required** as long as your scenario uses the supported EIDs.
+If you need an EID that isn't listed below, add a generator function following the
+pattern in `artiforge/generators/security.py`.
+
+### Supported EIDs
+
+| Channel | EIDs |
+|---------|------|
+| Security | 4624, 4625, 4634, 4648, 4672, 4688, 4698, 4720, 4732, 4776 |
+| System | 7036, 7045 |
+| Sysmon | 1, 3, 11, 13, 22 |
+| Application | 1 |
+| PowerShell | 4103, 4104 |
 
 ---
 

@@ -22,6 +22,7 @@ _ECS_LOG_NAME = {
     "System":      "System",
     "Sysmon":      "Microsoft-Windows-Sysmon/Operational",
     "Application": "Application",
+    "PowerShell":  "Microsoft-Windows-PowerShell/Operational",
 }
 
 _ECS_PROVIDER = {
@@ -29,19 +30,22 @@ _ECS_PROVIDER = {
     "System":      "Service Control Manager",
     "Sysmon":      "Microsoft-Windows-Sysmon",
     "Application": "Application",
+    "PowerShell":  "Microsoft-Windows-PowerShell",
 }
 
 _ECS_CATEGORY: dict[int, list[str]] = {
     4624: ["authentication"], 4625: ["authentication"],
     4634: ["authentication"], 4648: ["authentication"],
     4672: ["authentication"], 4688: ["process"],
-    4698: ["configuration"],
-    4720: ["iam"],            4732: ["iam"],
-    7045: ["configuration"],
+    4698: ["configuration"],  4720: ["iam"],
+    4732: ["iam"],            4776: ["authentication"],
+    7036: ["configuration"],  7045: ["configuration"],
     1:    ["process"],
     3:    ["network"],
     11:   ["file"],
     13:   ["registry"],
+    22:   ["network"],
+    4103: ["process"],        4104: ["process"],
 }
 
 

@@ -126,6 +126,22 @@ def eid_13(fields: dict, host: Host, user: User | None, timestamp: Any, **_) -> 
     }
 
 
+# ── EID 22 — DNS Query ───────────────────────────────────────────────────────
+
+def eid_22(fields: dict, host: Host, user: User | None, timestamp: Any, **_) -> dict:
+    return {
+        "RuleName": fields.get("RuleName", "-"),
+        "UtcTime": format_system_time(timestamp),
+        "ProcessGuid": fields.get("ProcessGuid", _guid()),
+        "ProcessId": _pid(),
+        "QueryName": fields.get("QueryName", "region2.v2.argotunnel.com"),
+        "QueryStatus": fields.get("QueryStatus", "0"),
+        "QueryResults": fields.get("QueryResults", "type:  5 region2.v2.argotunnel.com;198.41.192.227;"),
+        "Image": fields.get("Image", r"C:\Windows\System32\cmd.exe"),
+        "User": fields.get("User", f"{user.domain}\\{user.username}" if user else "NT AUTHORITY\\SYSTEM"),
+    }
+
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _fake_md5() -> str:
@@ -145,6 +161,7 @@ _GENERATORS = {
     3:  eid_3,
     11: eid_11,
     13: eid_13,
+    22: eid_22,
 }
 
 
