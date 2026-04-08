@@ -7,6 +7,15 @@ from typing import Any
 from artiforge.core.models import Host, User
 
 
+# ── EID 7036 — Service State Changed ─────────────────────────────────────────
+
+def eid_7036(fields: dict, **_) -> dict:
+    return {
+        "param1": fields.get("param1", "Wuauserv_Svc"),
+        "param2": fields.get("param2", "running"),
+    }
+
+
 # ── EID 7045 — New Service Installed ──────────────────────────────────────────
 
 def eid_7045(fields: dict, **_) -> dict:
@@ -25,6 +34,7 @@ def eid_7045(fields: dict, **_) -> dict:
 # ── Dispatcher ────────────────────────────────────────────────────────────────
 
 _GENERATORS = {
+    7036: eid_7036,
     7045: eid_7045,
 }
 

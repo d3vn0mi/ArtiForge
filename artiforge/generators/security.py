@@ -245,6 +245,17 @@ def eid_4732(fields: dict, host: Host, user: User | None, spec: Any, **_) -> dic
     }
 
 
+# ── EID 4776 — Credential Validation (NTLM) ──────────────────────────────────
+
+def eid_4776(fields: dict, host: Host, user: User | None, **_) -> dict:
+    return {
+        "PackageName": fields.get("PackageName", "MICROSOFT_AUTHENTICATION_PACKAGE_V1_0"),
+        "LogonAccount": fields.get("LogonAccount", user.username if user else "-"),
+        "Workstation": fields.get("Workstation", host.name),
+        "Status": fields.get("Status", "0x0"),
+    }
+
+
 # ── EID 4672 — Special Privileges Assigned to New Logon ──────────────────────
 
 def eid_4672(fields: dict, host: Host, user: User | None, **_) -> dict:
@@ -279,6 +290,7 @@ _GENERATORS = {
     4720: eid_4720,
     4732: eid_4732,
     4672: eid_4672,
+    4776: eid_4776,
 }
 
 

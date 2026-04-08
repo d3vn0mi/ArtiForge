@@ -3,7 +3,7 @@
 import pytest
 from datetime import datetime, timezone
 from artiforge.core.models import Host, User
-from artiforge.generators import security, system, sysmon, application
+from artiforge.generators import security, system, sysmon, application, powershell
 
 
 # ── Shared fixtures ───────────────────────────────────────────────────────────
@@ -220,6 +220,85 @@ def test_app1_cloudflared_error(host, user, ts, spec_stub):
 def test_app1_default_data(host, user, ts, spec_stub):
     result = application.generate(1, {}, host, user, spec_stub, ts)
     assert "cloudflared" in result["Data"].lower() or "tunnel" in result["Data"].lower()
+
+
+# ── Security EID 4776 ────────────────────────────────────────────────────────
+
+def test_4776_ntlm_fields(host, user, ts, spec_stub):
+    result = security.generate(4776, {
+        "LogonAccount": "marcus.webb",
+        "Workstation": "WIN-WS1",
+        "Status": "0x0",
+    }, host, user, spec_stub, ts)
+    assert result["LogonAccount"] == "marcus.webb"
+    assert result["Workstation"] == "WIN-WS1"
+    assert result["Status"] == "0x0"
+    assert "PackageName" in result
+
+
+# ── System EID 7036 ───────────────────────────────────────────────────────────
+
+def test_7036_service_state(host, user, ts, spec_stub):
+    result = system.generate(7036, {
+        "param1": "Wuauserv_Svc",
+        "param2": "running",
+    }, host, user, spec_stub, ts)
+    assert result["param1"] == "Wuauserv_Svc"
+    assert result["param2"] == "running"
+
+
+# ── Sysmon EID 22 ────────────────────────────────────────────────────────────
+
+def test_sysmon22_dns_query(host, user, ts, spec_stub):
+    result = sysmon.generate(22, {
+        "QueryName": "region2.v2.argotunnel.com",
+        "Image": r"C:\ProgramData\Microsoft\Windows\update.exe",
+    }, host, user, spec_stub, ts)
+    assert result["QueryName"] == "region2.v2.argotunnel.com"
+    assert result["Image"] == r"C:\ProgramData\Microsoft\Windows\update.exe"
+    assert "QueryResults" in result
+    assert "UtcTime" in result
+
+
+# ── PowerShell EID 4103 ───────────────────────────────────────────────────────
+
+def test_4103_module_logging(host, user, ts, spec_stub):
+    result = powershell.generate(4103, {
+        "CommandName": "Compress-Archive",
+    }, host, user, spec_stub, ts)
+    assert "Payload" in result
+    assert "ContextInfo" in result
+    assert "Compress-Archive" in result["ContextInfo"]
+
+
+# ── PowerShell EID 4104 ───────────────────────────────────────────────────────
+
+def test_4104_script_block(host, user, ts, spec_stub):
+    result = powershell.generate(4104, {
+        "ScriptBlockText": "Compress-Archive -Path C:\\Users\\* -DestinationPath C:\\Temp\\out.zip",
+    }, host, user, spec_stub, ts)
+    assert "Compress-Archive" in result["ScriptBlockText"]
+    assert "ScriptBlockId" in result
+    assert result["MessageNumber"] == "1"
+
+
+def test_4104_defaults(host, user, ts, spec_stub):
+    result = powershell.generate(4104, {}, host, user, spec_stub, ts)
+    assert "ScriptBlockText" in result
+    assert "ScriptBlockId" in result
+
+
+def test_unknown_powershell_eid_raises(host, user, ts, spec_stub):
+    with pytest.raises(ValueError, match="not implemented"):
+        powershell.generate(9999, {}, host, user, spec_stub, ts)
+
+
+# ── Sysmon 1 hash format now includes MD5 ────────────────────────────────────
+
+def test_sysmon1_hashes_include_md5(host, user, ts, spec_stub):
+    result = sysmon.generate(1, {}, host, user, spec_stub, ts)
+    assert "MD5=" in result["Hashes"]
+    assert "SHA256=" in result["Hashes"]
 
 
 # ── Unknown EID raises ────────────────────────────────────────────────────────

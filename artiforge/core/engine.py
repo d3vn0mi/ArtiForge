@@ -25,10 +25,11 @@ from artiforge.generators import dispatch_event, dispatch_file
 # ── Provider metadata ──────────────────────────────────────────────────────────
 
 _PROVIDER = {
-    "Security": ("Microsoft-Windows-Security-Auditing", "{54849625-5478-4994-A5BA-3E3B0328C30D}"),
-    "System":   ("Service Control Manager",              "{555908d1-a6d7-4695-8e1e-26931d2012f4}"),
-    "Sysmon":   ("Microsoft-Windows-Sysmon",            "{5770385F-C22A-43E0-BF4C-06F5698FFBD9}"),
-    "Application": ("Application",                      "{00000000-0000-0000-0000-000000000000}"),
+    "Security":    ("Microsoft-Windows-Security-Auditing", "{54849625-5478-4994-A5BA-3E3B0328C30D}"),
+    "System":      ("Service Control Manager",             "{555908d1-a6d7-4695-8e1e-26931d2012f4}"),
+    "Sysmon":      ("Microsoft-Windows-Sysmon",            "{5770385F-C22A-43E0-BF4C-06F5698FFBD9}"),
+    "Application": ("Application",                         "{00000000-0000-0000-0000-000000000000}"),
+    "PowerShell":  ("Microsoft-Windows-PowerShell",        "{A0C1853B-5C40-4B15-8766-3CF1C58F985A}"),
 }
 
 
@@ -44,9 +45,11 @@ def _labs_root() -> Path:
 
 
 def list_labs() -> list[dict]:
-    """Return metadata for all available labs."""
+    """Return metadata for all available labs (excludes _template)."""
     result = []
     for yaml_path in sorted(_labs_root().glob("*/lab.yaml")):
+        if yaml_path.parent.name.startswith("_"):
+            continue
         try:
             raw = yaml.safe_load(yaml_path.read_text())
             spec = LabSpec.model_validate(raw)
@@ -72,6 +75,14 @@ def load_lab(lab_id: str) -> LabSpec:
     if not yaml_path.exists():
         raise FileNotFoundError(f"Lab '{lab_id}' not found at {yaml_path}")
     raw = yaml.safe_load(yaml_path.read_text())
+    return LabSpec.model_validate(raw)
+
+
+def load_lab_from_path(path: Path) -> LabSpec:
+    """Parse and validate a lab YAML from an explicit filesystem path."""
+    if not path.exists():
+        raise FileNotFoundError(f"Lab YAML not found: {path}")
+    raw = yaml.safe_load(path.read_text())
     return LabSpec.model_validate(raw)
 
 

@@ -1,0 +1,331 @@
+# ============================================================
+# ArtiForge — Lab Specification Template
+# ============================================================
+# Copy this file to your lab directory and fill in the
+# placeholders. Remove or replace every line marked FIXME.
+#
+# Workflow:
+#   artiforge validate --lab-path ./lab.yaml   ← check first
+#   artiforge generate --lab-path ./lab.yaml   ← then generate
+#
+# Supported EIDs:
+#   Security    4624 4625 4634 4648 4672 4688 4698 4720 4732 4776
+#   System      7036 7045
+#   Sysmon      1 3 11 13 22
+#   Application 1
+#   PowerShell  4103 4104
+# ============================================================
+
+lab:
+  id: my-lab-id                  # FIXME: lowercase, hyphens allowed, e.g. "uc4-rdp-pivot"
+  name: "My Lab Name"            # FIXME: human-readable, shown in artiforge list-labs
+  description: >
+    FIXME: one to three sentences describing the attack scenario,
+    what technique it demonstrates, and what the trainee must find.
+  mitre_version: "v14"
+
+# ── Infrastructure ────────────────────────────────────────────────────────────
+# Define every host that appears in the scenario.
+# Host keys (WIN-WS1, etc.) are referenced in phase/event "host:" fields.
+# Use real-looking SID prefixes — generate a random one or copy from a real
+# domain with different suffix digits.
+# ─────────────────────────────────────────────────────────────────────────────
+infrastructure:
+  domain: lab.local              # FIXME: set your AD domain or leave as lab.local
+
+  hosts:
+    WIN-WS1:                     # Victim workstation
+      ip: 10.10.10.10            # FIXME
+      fqdn: WIN-WS1.lab.local    # FIXME
+      os: "Windows 10 22H2"
+      sid_prefix: "S-1-5-21-3456789012-2345678901-1234567890"  # FIXME: must be unique
+      users:
+        - username: victim.user  # FIXME: primary interactive user
+          domain: LAB
+          rid: 1001              # Relative ID — must be unique per host
+
+    WIN-DC1:                     # Domain controller (add if needed)
+      ip: 10.10.10.2
+      fqdn: WIN-DC1.lab.local
+      os: "Windows Server 2019"
+      sid_prefix: "S-1-5-21-3456789012-2345678901-2222222222"  # FIXME
+
+    # Add more hosts as needed:
+    # WIN-SRV1:
+    #   ip: 10.10.10.30
+    #   fqdn: WIN-SRV1.lab.local
+    #   os: "Windows Server 2019"
+    #   sid_prefix: "S-1-5-21-3456789012-2345678901-3333333333"
+    #   users:
+    #     - username: svc_account
+    #       domain: WIN-SRV1
+    #       rid: 1100
+
+# ── Attack specification ──────────────────────────────────────────────────────
+attack:
+  base_time: "2026-01-01T09:00:00Z"   # Override at run time with --base-time
+  malicious_account: attacker_acct     # FIXME: account created by attacker (used in
+                                       # default 4720/4732 event fields)
+  phases:
+
+    # ──────────────────────────────────────────────────────────────────────────
+    # PHASE 01 — Initial Access
+    # FIXME: rename, add MITRE IDs, adjust host/user/offset
+    # ──────────────────────────────────────────────────────────────────────────
+    - id: 1
+      name: "Initial Access — FIXME"
+      mitre: [T1566.001]          # FIXME: list ATT&CK technique IDs
+      offset_minutes: 0           # Phase start relative to base_time (must be >= 0)
+      host: WIN-WS1               # Default host for events below (overridable per-event)
+      user: victim.user           # Default user for events below (overridable per-event)
+
+      events:
+
+        # ── 4624: Logon ───────────────────────────────────────────────────────
+        # Drop this block if you don't need a logon event to open the phase.
+        - channel: Security
+          eid: 4624
+          offset_seconds: 0       # Seconds after phase start (must be >= 0)
+          fields:
+            TargetUserName: victim.user
+            TargetDomainName: LAB
+            LogonType: '2'        # 2=interactive, 3=network, 10=RDP
+            LogonProcessName: User32
+            AuthenticationPackageName: Negotiate
+            WorkstationName: WIN-WS1
+            IpAddress: '-'
+            IpPort: '-'
+            ProcessName: 'C:\Windows\System32\winlogon.exe'
+
+        # ── 4688 + Sysmon 1: Process creation (always pair these) ────────────
+        # Use the same offset_seconds so timestamps align.
+        - channel: Security
+          eid: 4688
+          offset_seconds: 5
+          fields:
+            SubjectUserName: victim.user
+            SubjectDomainName: LAB
+            NewProcessName: 'C:\Windows\System32\cmd.exe'  # FIXME
+            CommandLine: 'cmd.exe /c whoami'               # FIXME
+            ParentProcessName: 'C:\Windows\explorer.exe'   # FIXME
+            TokenElevationType: '%%1938'      # %%1938=limited, %%1937=full, %%1936=default
+
+        - channel: Sysmon
+          eid: 1
+          offset_seconds: 5
+          fields:
+            ProcessGuid: &cmd_guid '{AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE}'  # FIXME: replace with a real-looking GUID
+            Image: 'C:\Windows\System32\cmd.exe'    # FIXME
+            OriginalFileName: 'Cmd.Exe'
+            CommandLine: 'cmd.exe /c whoami'        # FIXME
+            ParentImage: 'C:\Windows\explorer.exe'  # FIXME
+            ParentCommandLine: 'C:\Windows\explorer.exe'
+            User: 'LAB\victim.user'                 # FIXME
+            IntegrityLevel: Medium
+            Hashes: 'SHA256=975B9D4F0EBF8C4B0E2A6D8C1F3E5A7B9D0C2E4F6A8B0D2E4F6A8B0D2E4F6A8'  # FIXME
+
+        # ── Sysmon 3: Network connection (add if process makes outbound call) ─
+        # Share the same ProcessGuid as the Sysmon 1 above using a YAML anchor.
+        - channel: Sysmon
+          eid: 3
+          offset_seconds: 8
+          fields:
+            ProcessGuid: *cmd_guid      # References the anchor defined above
+            Image: 'C:\Windows\System32\cmd.exe'
+            Protocol: tcp
+            Initiated: 'true'
+            SourceIp: 10.10.10.10
+            SourceHostname: WIN-WS1.lab.local
+            DestinationIp: 1.2.3.4            # FIXME
+            DestinationHostname: evil.example.com  # FIXME
+            DestinationPort: 443
+            DestinationPortName: https
+
+        # ── Sysmon 22: DNS query (optional — precedes Sysmon 3) ───────────────
+        - channel: Sysmon
+          eid: 22
+          offset_seconds: 7
+          fields:
+            ProcessGuid: *cmd_guid
+            Image: 'C:\Windows\System32\cmd.exe'
+            QueryName: evil.example.com              # FIXME
+            QueryStatus: '0'
+            QueryResults: 'type:  5 evil.example.com;1.2.3.4;'  # FIXME
+
+        # ── Sysmon 11: File drop ──────────────────────────────────────────────
+        - channel: Sysmon
+          eid: 11
+          offset_seconds: 10
+          fields:
+            Image: 'C:\Windows\System32\cmd.exe'
+            TargetFilename: 'C:\Users\victim.user\AppData\Local\Temp\payload.exe'  # FIXME
+            User: 'LAB\victim.user'
+
+        # ── Sysmon 13: Registry modification ─────────────────────────────────
+        # Uncomment if your scenario involves registry persistence.
+        # - channel: Sysmon
+        #   eid: 13
+        #   offset_seconds: 12
+        #   fields:
+        #     Image: 'C:\Windows\System32\reg.exe'
+        #     TargetObject: 'HKCU\Software\Microsoft\Windows\CurrentVersion\Run\Updater'
+        #     Details: 'C:\Users\victim.user\AppData\Local\Temp\payload.exe'
+        #     User: 'LAB\victim.user'
+
+      file_artifacts:
+        # FIXME: remove or fill in. Supported types:
+        #   lnk, xsl, inf, xml_task, binary_placeholder, raw
+        - type: raw
+          dest: 'C:\Users\victim.user\AppData\Local\Temp\payload.exe'
+          content_template: "# Placeholder for payload.exe\n"
+
+    # ──────────────────────────────────────────────────────────────────────────
+    # PHASE 02 — Persistence (T+15 minutes)
+    # FIXME: rename and fill in
+    # ──────────────────────────────────────────────────────────────────────────
+    - id: 2
+      name: "Persistence — FIXME"
+      mitre: [T1053.005]          # FIXME
+      offset_minutes: 15
+      host: WIN-WS1
+      user: victim.user
+
+      events:
+
+        # ── Security 4698: Scheduled task created ─────────────────────────────
+        - channel: Security
+          eid: 4698
+          offset_seconds: 5
+          fields:
+            SubjectUserName: victim.user
+            SubjectDomainName: LAB
+            TaskName: '\WindowsUpdaterTask'   # FIXME
+
+        # ── Security 4672: Special privileges (add after any admin logon) ─────
+        # Fires automatically after 4624 for privileged accounts.
+        # - channel: Security
+        #   eid: 4672
+        #   offset_seconds: 6
+        #   fields:
+        #     SubjectUserName: victim.user
+        #     SubjectDomainName: LAB
+
+        # ── PowerShell 4104: Script block logging ─────────────────────────────
+        # Add if a PowerShell command is executed. Pair with 4688 for the
+        # powershell.exe process itself.
+        # - channel: PowerShell
+        #   eid: 4104
+        #   offset_seconds: 10
+        #   fields:
+        #     ScriptBlockText: 'New-ScheduledTask ...'   # FIXME
+        #     MessageNumber: '1'
+        #     MessageTotal: '1'
+
+      file_artifacts: []
+
+    # ──────────────────────────────────────────────────────────────────────────
+    # PHASE 03 — Lateral Movement / Impact (T+60 minutes)
+    # FIXME: rename and fill in, or delete if not needed
+    # ──────────────────────────────────────────────────────────────────────────
+    - id: 3
+      name: "Lateral Movement — FIXME"
+      mitre: [T1021.001]          # FIXME
+      offset_minutes: 60
+      host: WIN-WS1
+      user: victim.user
+
+      events:
+
+        # ── Security 4648: Explicit credential use ────────────────────────────
+        - channel: Security
+          eid: 4648
+          offset_seconds: 0
+          fields:
+            SubjectUserName: victim.user
+            SubjectDomainName: LAB
+            TargetUserName: target.user         # FIXME
+            TargetDomainName: WIN-SRV1          # FIXME
+            TargetServerName: WIN-SRV1          # FIXME
+            TargetInfo: WIN-SRV1.lab.local      # FIXME
+            ProcessName: 'C:\Windows\System32\mstsc.exe'
+            IpAddress: 10.10.10.10
+            IpPort: '0'
+
+        # ── Sysmon 3: RDP connection (same time as 4648) ──────────────────────
+        - channel: Sysmon
+          eid: 3
+          offset_seconds: 1
+          fields:
+            Image: 'C:\Windows\System32\mstsc.exe'
+            Protocol: tcp
+            Initiated: 'true'
+            SourceIp: 10.10.10.10
+            SourceHostname: WIN-WS1.lab.local
+            DestinationIp: 10.10.10.30         # FIXME: target host IP
+            DestinationHostname: WIN-SRV1.lab.local   # FIXME
+            DestinationPort: 3389
+            DestinationPortName: 'ms-wbt-server'
+
+        # ── Security 4624 Type 10: RDP logon on target ────────────────────────
+        - channel: Security
+          eid: 4624
+          offset_seconds: 5
+          host: WIN-SRV1         # Different host — overrides phase default
+          user: target.user      # FIXME: must exist in WIN-SRV1.users
+          fields:
+            TargetUserName: target.user    # FIXME
+            TargetDomainName: WIN-SRV1     # FIXME
+            LogonType: '10'
+            LogonProcessName: User32
+            AuthenticationPackageName: Negotiate
+            WorkstationName: WIN-WS1
+            IpAddress: 10.10.10.10
+            IpPort: '49843'
+            ProcessName: 'C:\Windows\System32\winlogon.exe'
+
+        # ── System 7045: Service installed ───────────────────────────────────
+        # Uncomment to add a service-install event.
+        # - channel: System
+        #   eid: 7045
+        #   offset_seconds: 10
+        #   host: WIN-SRV1
+        #   fields:
+        #     ServiceName: EvilSvc
+        #     ImagePath: 'C:\Windows\Temp\evil.exe'
+        #     ServiceType: 'user mode service'
+        #     StartType: 'auto start'
+        #     AccountName: LocalSystem
+
+        # ── Security 4720 + 4732: New local admin account ─────────────────────
+        # Uncomment to simulate attacker creating a backdoor account.
+        # - channel: Security
+        #   eid: 4720
+        #   offset_seconds: 20
+        #   host: WIN-SRV1
+        #   fields:
+        #     SubjectUserName: SYSTEM
+        #     SubjectDomainName: NT AUTHORITY
+        #     TargetUserName: attacker_acct
+        #     TargetDomainName: WIN-SRV1
+        # - channel: Security
+        #   eid: 4732
+        #   offset_seconds: 21
+        #   host: WIN-SRV1
+        #   fields:
+        #     SubjectUserName: SYSTEM
+        #     SubjectDomainName: NT AUTHORITY
+        #     MemberName: attacker_acct
+        #     TargetUserName: Administrators
+        #     TargetDomainName: WIN-SRV1
+
+        # ── Security 4634: Logoff ─────────────────────────────────────────────
+        - channel: Security
+          eid: 4634
+          offset_seconds: 300
+          host: WIN-SRV1
+          fields:
+            TargetUserName: target.user    # FIXME
+            TargetDomainName: WIN-SRV1     # FIXME
+            LogonType: '10'
+
+      file_artifacts: []

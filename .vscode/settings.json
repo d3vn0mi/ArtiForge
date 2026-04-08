@@ -1,0 +1,8 @@
+{
+  "yaml.schemas": {
+    "./artiforge/labs/lab.schema.json": "**/labs/**/lab.yaml"
+  },
+  "yaml.validate": true,
+  "yaml.hover": true,
+  "yaml.completion": true
+}
