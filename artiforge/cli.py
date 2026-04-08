@@ -388,5 +388,62 @@ def _write_import_md(run_dir: Path, bundle, formats: list[str]):
     (run_dir / "IMPORT.md").write_text("\n".join(lines), encoding="utf-8")
 
 
+
+# ── new-lab ───────────────────────────────────────────────────────────────────
+
+@main.command("new-lab")
+@click.option("--id", "lab_id", required=True,
+              help="Lab ID: lowercase letters, digits, hyphens (e.g. uc4-rdp-pivot)")
+@click.option("--name", "lab_name", default=None,
+              help="Human-readable lab name (defaults to the lab ID)")
+@click.option("--output", "-o", default=".",
+              show_default=True,
+              help="Parent directory to create the new lab folder in")
+def new_lab(lab_id: str, lab_name: str | None, output: str):
+    """Scaffold a new lab directory from the built-in template."""
+    import re
+    import shutil
+
+    if not re.match(r'^[a-z0-9][a-z0-9-]*$', lab_id):
+        click.echo(
+            "Error: --id must be lowercase letters, digits, and hyphens, "
+            "and must start with a letter or digit.",
+            err=True,
+        )
+        sys.exit(1)
+
+    display_name = lab_name or lab_id
+    template_dir = Path(__file__).parent / "labs" / "_template"
+    dest_dir = Path(output) / lab_id
+
+    if dest_dir.exists():
+        click.echo(f"Error: destination already exists: {dest_dir}", err=True)
+        sys.exit(1)
+
+    dest_dir.mkdir(parents=True)
+
+    # Copy and patch lab.yaml
+    template_yaml = (template_dir / "lab.yaml").read_text(encoding="utf-8")
+    patched_yaml = template_yaml.replace(
+        "  id: my-lab-id                  # FIXME: lowercase, hyphens allowed, e.g. \"uc4-rdp-pivot\"",
+        f'  id: {lab_id}',
+    ).replace(
+        '  name: "My Lab Name"            # FIXME: human-readable, shown in artiforge list-labs',
+        f'  name: "{display_name}"',
+    )
+    (dest_dir / "lab.yaml").write_text(patched_yaml, encoding="utf-8")
+
+    # Copy DEVELOPMENT.md
+    shutil.copy(template_dir / "DEVELOPMENT.md", dest_dir / "DEVELOPMENT.md")
+
+    click.echo(f"\n[ArtiForge] Lab scaffolded: {dest_dir.resolve()}")
+    click.echo(f"\n  Next steps:")
+    click.echo(f"  1. Edit {dest_dir / 'lab.yaml'}")
+    click.echo(f"     → Fill in every line marked FIXME")
+    click.echo(f"  2. artiforge validate --lab-path {dest_dir / 'lab.yaml'}")
+    click.echo(f"  3. artiforge generate --lab-path {dest_dir / 'lab.yaml'} --dry-run")
+    click.echo(f"  4. artiforge generate --lab-path {dest_dir / 'lab.yaml'}\n")
+
+
 if __name__ == "__main__":
     main()

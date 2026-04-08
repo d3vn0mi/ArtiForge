@@ -45,9 +45,11 @@ def _labs_root() -> Path:
 
 
 def list_labs() -> list[dict]:
-    """Return metadata for all available labs."""
+    """Return metadata for all available labs (excludes _template)."""
     result = []
     for yaml_path in sorted(_labs_root().glob("*/lab.yaml")):
+        if yaml_path.parent.name.startswith("_"):
+            continue
         try:
             raw = yaml.safe_load(yaml_path.read_text())
             spec = LabSpec.model_validate(raw)
