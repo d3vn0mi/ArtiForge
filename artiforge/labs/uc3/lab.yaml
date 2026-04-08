@@ -77,6 +77,21 @@ attack:
       user: marcus.webb
 
       events:
+        # 4624 Type 2 — marcus.webb interactive logon (workstation session established)
+        - channel: Security
+          eid: 4624
+          offset_seconds: 0
+          fields:
+            TargetUserName: marcus.webb
+            TargetDomainName: LAB
+            LogonType: '2'
+            LogonProcessName: User32
+            AuthenticationPackageName: Negotiate
+            WorkstationName: WIN-WS1
+            IpAddress: '-'
+            IpPort: '-'
+            ProcessName: 'C:\Windows\System32\winlogon.exe'
+
         # Sysmon 11 — INF file dropped to %TEMP% by the LNK execution
         - channel: Sysmon
           eid: 11
@@ -307,14 +322,14 @@ attack:
             User: 'LAB\marcus.webb'
             Hashes: 'SHA256=2B3C4D5E6F7A8B9C0D1E2F3A4B5C6D7E8F9A0B1C2D3E4F5A6B7C8D9E0F1A2B3'
 
-        # 4720 — svc_backup_admin account created on WIN-BACKUP1
+        # 4720 — svc_backup_admin account created on WIN-BACKUP1 by Veeam service account
         - channel: Security
           eid: 4720
           offset_seconds: 180
           host: WIN-BACKUP1
           fields:
-            SubjectUserName: SYSTEM
-            SubjectDomainName: NT AUTHORITY
+            SubjectUserName: VEEAMBACKUP$
+            SubjectDomainName: WIN-BACKUP1
             TargetUserName: svc_backup_admin
             TargetDomainName: WIN-BACKUP1
 
@@ -324,8 +339,8 @@ attack:
           offset_seconds: 185
           host: WIN-BACKUP1
           fields:
-            SubjectUserName: SYSTEM
-            SubjectDomainName: NT AUTHORITY
+            SubjectUserName: VEEAMBACKUP$
+            SubjectDomainName: WIN-BACKUP1
             MemberName: svc_backup_admin
             TargetUserName: Administrators
             TargetDomainName: WIN-BACKUP1
@@ -343,7 +358,7 @@ attack:
             TargetDomainName: WIN-BACKUP1
             TargetServerName: WIN-BACKUP1
             TargetInfo: WIN-BACKUP1.lab.local
-            ProcessName: 'C:\Windows\System32\wbem\wmic.exe'
+            ProcessName: 'C:\Windows\System32\svchost.exe'
             IpAddress: 10.10.10.10
             IpPort: '49823'
 
@@ -414,25 +429,91 @@ attack:
             ParentProcessName: 'C:\Windows\System32\cmd.exe'
 
         # Sysmon 1 — update.exe (cloudflared) process starts
+        # ProcessGuid anchor: all subsequent Sysmon 3 events for this process reference it
         - channel: Sysmon
           eid: 1
           offset_seconds: 17
           fields:
+            ProcessGuid: &update_exe_guid '{CF4A5B6C-7D8E-9F0A-1B2C-3D4E5F6A7B8C}'
             Image: 'C:\ProgramData\Microsoft\Windows\update.exe'
             OriginalFileName: 'cloudflared.exe'
             CommandLine: '"C:\ProgramData\Microsoft\Windows\update.exe" tunnel run --token FAKE_TOKEN'
             ParentImage: 'C:\Windows\System32\services.exe'
             User: 'NT AUTHORITY\SYSTEM'
             IntegrityLevel: System
-            Hashes: 'SHA256=CLOUDFLARED_BINARY_HASH_REPLACE_WITH_REAL'
+            Hashes: 'SHA256=A1B2C3D4E5F6A7B8C9D0E1F2A3B4C5D6E7F8A9B0C1D2E3F4A5B6C7D8E9F0A1B2'
 
-        # Sysmon 3 — update.exe outbound to argotunnel.com:443 (×5 failed attempts)
+        # Sysmon 3 — update.exe outbound to argotunnel.com:443 (5 failed attempts, exponential back-off)
+        # Attempt 1 (T+20s)
         - channel: Sysmon
           eid: 3
           offset_seconds: 20
-          repeat: 5
-          repeat_gap_seconds: 30
           fields:
+            ProcessGuid: *update_exe_guid
+            Image: 'C:\ProgramData\Microsoft\Windows\update.exe'
+            User: 'NT AUTHORITY\SYSTEM'
+            Protocol: tcp
+            Initiated: 'true'
+            SourceIp: 10.10.10.10
+            SourceHostname: WIN-WS1.lab.local
+            DestinationIp: 198.41.192.227
+            DestinationHostname: region2.v2.argotunnel.com
+            DestinationPort: 443
+            DestinationPortName: https
+        # Attempt 2 (T+25s — +5s)
+        - channel: Sysmon
+          eid: 3
+          offset_seconds: 25
+          fields:
+            ProcessGuid: *update_exe_guid
+            Image: 'C:\ProgramData\Microsoft\Windows\update.exe'
+            User: 'NT AUTHORITY\SYSTEM'
+            Protocol: tcp
+            Initiated: 'true'
+            SourceIp: 10.10.10.10
+            SourceHostname: WIN-WS1.lab.local
+            DestinationIp: 198.41.192.227
+            DestinationHostname: region2.v2.argotunnel.com
+            DestinationPort: 443
+            DestinationPortName: https
+        # Attempt 3 (T+35s — +10s)
+        - channel: Sysmon
+          eid: 3
+          offset_seconds: 35
+          fields:
+            ProcessGuid: *update_exe_guid
+            Image: 'C:\ProgramData\Microsoft\Windows\update.exe'
+            User: 'NT AUTHORITY\SYSTEM'
+            Protocol: tcp
+            Initiated: 'true'
+            SourceIp: 10.10.10.10
+            SourceHostname: WIN-WS1.lab.local
+            DestinationIp: 198.41.192.227
+            DestinationHostname: region2.v2.argotunnel.com
+            DestinationPort: 443
+            DestinationPortName: https
+        # Attempt 4 (T+55s — +20s)
+        - channel: Sysmon
+          eid: 3
+          offset_seconds: 55
+          fields:
+            ProcessGuid: *update_exe_guid
+            Image: 'C:\ProgramData\Microsoft\Windows\update.exe'
+            User: 'NT AUTHORITY\SYSTEM'
+            Protocol: tcp
+            Initiated: 'true'
+            SourceIp: 10.10.10.10
+            SourceHostname: WIN-WS1.lab.local
+            DestinationIp: 198.41.192.227
+            DestinationHostname: region2.v2.argotunnel.com
+            DestinationPort: 443
+            DestinationPortName: https
+        # Attempt 5 (T+95s — +40s)
+        - channel: Sysmon
+          eid: 3
+          offset_seconds: 95
+          fields:
+            ProcessGuid: *update_exe_guid
             Image: 'C:\ProgramData\Microsoft\Windows\update.exe'
             User: 'NT AUTHORITY\SYSTEM'
             Protocol: tcp
@@ -448,6 +529,7 @@ attack:
         - channel: Application
           eid: 1
           offset_seconds: 170
+          provider: cloudflared
           fields:
             Data: >
               2026-02-19T10:42:22Z ERR Failed to create tunnel
@@ -471,10 +553,27 @@ attack:
       user: marcus.webb
 
       events:
+        # Sysmon 3 — mstsc.exe initiates TCP 3389 to WIN-WS2 (RDP connection)
+        - channel: Sysmon
+          eid: 3
+          offset_seconds: 0
+          host: WIN-WS1
+          fields:
+            Image: 'C:\Windows\System32\mstsc.exe'
+            User: 'LAB\marcus.webb'
+            Protocol: tcp
+            Initiated: 'true'
+            SourceIp: 10.10.10.10
+            SourceHostname: WIN-WS1.lab.local
+            DestinationIp: 10.10.10.11
+            DestinationHostname: WIN-WS2.lab.local
+            DestinationPort: 3389
+            DestinationPortName: 'ms-wbt-server'
+
         # 4648 — Explicit credentials used on WS1 for RDP to WS2
         - channel: Security
           eid: 4648
-          offset_seconds: 0
+          offset_seconds: 1
           host: WIN-WS1
           fields:
             SubjectUserName: marcus.webb
@@ -504,6 +603,16 @@ attack:
             IpPort: '49843'
             ProcessName: 'C:\Windows\System32\winlogon.exe'
 
+        # 4672 — Special privileges assigned to svc_backup_admin (local admin RDP session)
+        - channel: Security
+          eid: 4672
+          offset_seconds: 6
+          host: WIN-WS2
+          user: svc_backup_admin
+          fields:
+            SubjectUserName: svc_backup_admin
+            SubjectDomainName: WIN-WS2
+
         # 4688 — Compress-Archive command on WIN-WS2 (file staging)
         - channel: Security
           eid: 4688
@@ -518,18 +627,20 @@ attack:
             ParentProcessName: 'C:\Windows\System32\cmd.exe'
 
         # Sysmon 1 — PowerShell process on WS2
+        # ProcessGuid anchor: Sysmon 11 file-create event references the same process
         - channel: Sysmon
           eid: 1
           offset_seconds: 120
           host: WIN-WS2
           user: svc_backup_admin
           fields:
+            ProcessGuid: &ps_exe_guid '{D5E6F7A8-B9C0-D1E2-F3A4-B5C6D7E8F9A0}'
             Image: 'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe'
             CommandLine: 'powershell.exe -NoP -EP Bypass Compress-Archive -Path "C:\Users\svc_backup_admin\Documents\SensitiveDocs\*" -DestinationPath "C:\Users\svc_backup_admin\AppData\Local\Temp\docs_2026.zip"'
             ParentImage: 'C:\Windows\System32\cmd.exe'
             User: 'WIN-WS2\svc_backup_admin'
             IntegrityLevel: High
-            Hashes: 'SHA256=POWERSHELL_HASH_PLACEHOLDER'
+            Hashes: 'SHA256=9F86D081884C7D659A2FEAA0C55AD015A3BF4F1B2B0B822CD15D6C15B0F00A08'
 
         # Sysmon 11 — ZIP file created on WIN-WS2 (staged for exfil)
         - channel: Sysmon
@@ -538,6 +649,7 @@ attack:
           host: WIN-WS2
           user: svc_backup_admin
           fields:
+            ProcessGuid: *ps_exe_guid
             Image: 'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe'
             TargetFilename: 'C:\Users\svc_backup_admin\AppData\Local\Temp\docs_2026.zip'
             User: 'WIN-WS2\svc_backup_admin'

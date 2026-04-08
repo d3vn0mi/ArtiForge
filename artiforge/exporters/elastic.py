@@ -5,7 +5,7 @@ Produces a single bulk_import.ndjson compatible with the Elasticsearch Bulk API:
   Content-Type: application/x-ndjson
 
 Each event becomes two lines:
-  {"index": {"_index": "winlogbeat-artiforge-uc3"}}
+  {"index": {"_index": "winlogbeat-artiforge-uc3-20260219_091200"}}
   { ...ECS-flavoured document... }
 """
 
@@ -26,9 +26,22 @@ _ECS_LOG_NAME = {
 
 _ECS_PROVIDER = {
     "Security":    "Microsoft-Windows-Security-Auditing",
-    "System":      "Microsoft-Windows-Eventlog",
+    "System":      "Service Control Manager",
     "Sysmon":      "Microsoft-Windows-Sysmon",
     "Application": "Application",
+}
+
+_ECS_CATEGORY: dict[int, list[str]] = {
+    4624: ["authentication"], 4625: ["authentication"],
+    4634: ["authentication"], 4648: ["authentication"],
+    4672: ["authentication"], 4688: ["process"],
+    4698: ["configuration"],
+    4720: ["iam"],            4732: ["iam"],
+    7045: ["configuration"],
+    1:    ["process"],
+    3:    ["network"],
+    11:   ["file"],
+    13:   ["registry"],
 }
 
 
@@ -40,7 +53,7 @@ def _to_ecs(ev: GeneratedEvent) -> dict:
             "code": str(ev.eid),
             "provider": _ECS_PROVIDER.get(ev.channel, ev.channel),
             "kind": "event",
-            "category": ["process"] if ev.eid in {4688, 1} else ["authentication"],
+            "category": _ECS_CATEGORY.get(ev.eid, ["event"]),
             "outcome": "success",
             "module": "security" if ev.channel == "Security" else ev.channel.lower(),
         },
@@ -105,7 +118,10 @@ def export(bundle: ArtifactBundle, output_dir: Path) -> Path:
     """Write bulk_import.ndjson. Return the written path."""
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    index_name = f"winlogbeat-artiforge-{bundle.lab_id}"
+    index_name = (
+        f"winlogbeat-artiforge-{bundle.lab_id}"
+        f"-{bundle.base_time.strftime('%Y%m%d_%H%M%S')}"
+    )
     out_path = output_dir / "bulk_import.ndjson"
 
     lines: list[str] = []

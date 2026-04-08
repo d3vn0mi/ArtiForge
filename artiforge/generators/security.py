@@ -25,7 +25,16 @@ def _logon_id() -> str:
 
 
 def _pid() -> str:
-    return _hex(random.randint(0x400, 0x3000))
+    return str(random.randint(1000, 15000))
+
+
+def _new_logon_guid() -> str:
+    import uuid
+    return "{" + str(uuid.uuid4()).upper() + "}"
+
+
+def _null_guid() -> str:
+    return "{00000000-0000-0000-0000-000000000000}"
 
 
 def _sid(host: Host, user: User | None) -> str:
@@ -42,7 +51,7 @@ def eid_4624(fields: dict, host: Host, user: User | None, **_) -> dict:
         "SubjectUserSid": "S-1-5-18",
         "SubjectUserName": "-",
         "SubjectDomainName": "-",
-        "SubjectLogonId": "0x3e7",
+        "SubjectLogonId": _logon_id(),
         "TargetUserSid": _sid(host, user),
         "TargetUserName": fields.get("TargetUserName", user.username if user else "-"),
         "TargetDomainName": fields.get("TargetDomainName", user.domain if user else "-"),
@@ -51,7 +60,9 @@ def eid_4624(fields: dict, host: Host, user: User | None, **_) -> dict:
         "LogonProcessName": fields.get("LogonProcessName", "User32" if logon_type == "10" else "NtLmSsp"),
         "AuthenticationPackageName": fields.get("AuthenticationPackageName", "Negotiate"),
         "WorkstationName": fields.get("WorkstationName", host.name),
-        "LogonGuid": "{00000000-0000-0000-0000-000000000000}",
+        "LogonGuid": fields.get("LogonGuid",
+            _null_guid() if fields.get("AuthenticationPackageName") == "NTLM"
+            else _new_logon_guid()),
         "TransmittedServices": "-",
         "LmPackageName": "-",
         "KeyLength": "0",
@@ -118,7 +129,7 @@ def eid_4648(fields: dict, host: Host, user: User | None, **_) -> dict:
         "SubjectUserName": fields.get("SubjectUserName", user.username if user else "-"),
         "SubjectDomainName": fields.get("SubjectDomainName", user.domain if user else "-"),
         "SubjectLogonId": _logon_id(),
-        "LogonGuid": "{00000000-0000-0000-0000-000000000000}",
+        "LogonGuid": fields.get("LogonGuid", _new_logon_guid()),
         "TargetUserName": fields.get("TargetUserName", "svc_backup_admin"),
         "TargetDomainName": fields.get("TargetDomainName", host.name),
         "TargetLogonGuid": "{00000000-0000-0000-0000-000000000000}",
@@ -234,6 +245,28 @@ def eid_4732(fields: dict, host: Host, user: User | None, spec: Any, **_) -> dic
     }
 
 
+# ── EID 4672 — Special Privileges Assigned to New Logon ──────────────────────
+
+def eid_4672(fields: dict, host: Host, user: User | None, **_) -> dict:
+    return {
+        "SubjectUserSid": _sid(host, user),
+        "SubjectUserName": fields.get("SubjectUserName", user.username if user else "SYSTEM"),
+        "SubjectDomainName": fields.get("SubjectDomainName", user.domain if user else "NT AUTHORITY"),
+        "SubjectLogonId": _logon_id(),
+        "PrivilegeList": fields.get("PrivilegeList", (
+            "SeSecurityPrivilege\n\t\t\t\t"
+            "SeTakeOwnershipPrivilege\n\t\t\t\t"
+            "SeLoadDriverPrivilege\n\t\t\t\t"
+            "SeBackupPrivilege\n\t\t\t\t"
+            "SeRestorePrivilege\n\t\t\t\t"
+            "SeDebugPrivilege\n\t\t\t\t"
+            "SeSystemEnvironmentPrivilege\n\t\t\t\t"
+            "SeImpersonatePrivilege\n\t\t\t\t"
+            "SeDelegateSessionUserImpersonatePrivilege"
+        )),
+    }
+
+
 # ── Dispatcher ────────────────────────────────────────────────────────────────
 
 _GENERATORS = {
@@ -245,6 +278,7 @@ _GENERATORS = {
     4698: eid_4698,
     4720: eid_4720,
     4732: eid_4732,
+    4672: eid_4672,
 }
 
 

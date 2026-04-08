@@ -24,6 +24,16 @@ def _guid() -> str:
     return f"{{{str(uuid.uuid4()).upper()}}}"
 
 
+def _stable_guid(seed: str) -> str:
+    """Deterministic GUID derived from a seed string (uuid5 / DNS namespace).
+
+    Use this when multiple events must share the same ProcessGuid — e.g. a
+    Sysmon 1 process-create and its subsequent Sysmon 3 network events.
+    Pass the same seed string to all correlated events.
+    """
+    return "{" + str(uuid.uuid5(uuid.NAMESPACE_DNS, seed)).upper() + "}"
+
+
 # ── EID 1 — Process Create ────────────────────────────────────────────────────
 
 def eid_1(fields: dict, host: Host, user: User | None, timestamp: Any, **_) -> dict:
@@ -47,7 +57,7 @@ def eid_1(fields: dict, host: Host, user: User | None, timestamp: Any, **_) -> d
         "LogonId": hex(random.randint(0x10000, 0x9FFFF)),
         "TerminalSessionId": fields.get("TerminalSessionId", "1"),
         "IntegrityLevel": fields.get("IntegrityLevel", "High"),
-        "Hashes": fields.get("Hashes", f"SHA256={_fake_sha256()}"),
+        "Hashes": fields.get("Hashes", f"MD5={_fake_md5()},SHA256={_fake_sha256()}"),
         "ParentProcessGuid": _guid(),
         "ParentProcessId": _pid(),
         "ParentImage": fields.get("ParentImage", r"C:\Windows\System32\cmd.exe"),
@@ -117,6 +127,11 @@ def eid_13(fields: dict, host: Host, user: User | None, timestamp: Any, **_) -> 
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _fake_md5() -> str:
+    import secrets
+    return secrets.token_hex(16).upper()
+
 
 def _fake_sha256() -> str:
     import secrets

@@ -20,7 +20,7 @@ def test_bundle_returns_artifact_bundle(uc3_bundle):
 
 
 def test_total_event_count(uc3_bundle):
-    assert len(uc3_bundle.events) == 37
+    assert len(uc3_bundle.events) == 40
 
 
 def test_total_file_count(uc3_bundle):
@@ -40,11 +40,11 @@ def test_all_phases_represented(uc3_bundle):
 
 def test_phase_event_counts(uc3_bundle):
     counts = Counter(e.phase_id for e in uc3_bundle.events)
-    assert counts[1] == 8
+    assert counts[1] == 9   # +1 initial 4624 logon
     assert counts[2] == 5
     assert counts[3] == 6
-    assert counts[4] == 12   # includes 5 repeated Sysmon 3 events
-    assert counts[5] == 6
+    assert counts[4] == 12  # 5 individual Sysmon 3 events (exponential backoff)
+    assert counts[5] == 8   # +1 Sysmon 3 RDP, +1 4672 special privileges
 
 
 # ── Host distribution ─────────────────────────────────────────────────────────
@@ -161,7 +161,7 @@ def test_rdp_logon_type_10(uc3_bundle):
 def test_phase_filter_reduces_events(uc3_bundle):
     spec = engine.load_lab("uc3")
     bundle = engine.run(spec, phase_filter=[1])
-    assert len(bundle.events) == 8
+    assert len(bundle.events) == 9
     assert all(e.phase_id == 1 for e in bundle.events)
 
 
@@ -170,7 +170,7 @@ def test_phase_filter_multiple(uc3_bundle):
     bundle = engine.run(spec, phase_filter=[1, 4])
     phase_ids = {e.phase_id for e in bundle.events}
     assert phase_ids == {1, 4}
-    assert len(bundle.events) == 8 + 12
+    assert len(bundle.events) == 9 + 12
 
 
 # ── Record IDs ────────────────────────────────────────────────────────────────
@@ -182,3 +182,33 @@ def test_record_ids_are_unique(uc3_bundle):
 
 def test_record_ids_start_at_1000(uc3_bundle):
     assert min(e.record_id for e in uc3_bundle.events) == 1000
+
+
+# ── Realism fixes ─────────────────────────────────────────────────────────────
+
+def test_initial_logon_phase1(uc3_bundle):
+    """Phase 1 must open with a 4624 logon establishing the marcus.webb session."""
+    p1 = [e for e in uc3_bundle.events if e.phase_id == 1]
+    eids = {e.eid for e in p1}
+    assert 4624 in eids
+
+
+def test_special_privileges_after_rdp(uc3_bundle):
+    """4672 must immediately follow the 4624 RDP logon on WIN-WS2."""
+    ws2 = sorted(
+        [e for e in uc3_bundle.events if e.host == "WIN-WS2"],
+        key=lambda e: e.timestamp,
+    )
+    eids = [e.eid for e in ws2]
+    i = eids.index(4624)
+    assert eids[i + 1] == 4672
+
+
+def test_rdp_sysmon3_present(uc3_bundle):
+    """Phase 5 must contain a Sysmon 3 event for the mstsc.exe → port 3389 connection."""
+    rdp_net = [
+        e for e in uc3_bundle.events
+        if e.eid == 3 and e.phase_id == 5 and e.channel == "Sysmon"
+    ]
+    assert len(rdp_net) == 1
+    assert rdp_net[0].event_data["DestinationPort"] == "3389"

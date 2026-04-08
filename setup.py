@@ -13,7 +13,7 @@ setup(
     ],
     entry_points={
         "console_scripts": [
-            "artiforge=cli:main",
+            "artiforge=artiforge.cli:main",
         ],
     },
     python_requires=">=3.10",

@@ -2,7 +2,8 @@
 
 import pytest
 from datetime import timezone
-from artiforge.core.models import Host, User, LabSpec
+from pydantic import ValidationError
+from artiforge.core.models import Host, User, LabSpec, EventSpec, FileArtifactSpec
 from artiforge.core import engine
 
 
@@ -82,5 +83,22 @@ def test_list_labs_includes_uc3():
 def test_list_labs_event_count():
     labs = engine.list_labs()
     uc3 = next(l for l in labs if l["id"] == "uc3")
-    assert uc3["events"] == 37
+    assert uc3["events"] == 40
     assert uc3["phases"] == 5
+
+
+# ── Pydantic validation constraints ───────────────────────────────────────────
+
+def test_negative_offset_seconds_raises():
+    with pytest.raises(ValidationError):
+        EventSpec(channel="Security", eid=4688, offset_seconds=-1)
+
+
+def test_zero_repeat_raises():
+    with pytest.raises(ValidationError):
+        EventSpec(channel="Security", eid=4688, repeat=0)
+
+
+def test_invalid_artifact_type_raises():
+    with pytest.raises(ValidationError):
+        FileArtifactSpec(type="xml", dest=r"C:\foo\bar.xml")  # "xml" not in Literal
