@@ -18,6 +18,30 @@ ingest them, and hunt through the events in Kibana.
 
 ---
 
+## Local vs. Remote Server
+
+| Scenario | Kibana URL | Run scripts from |
+|----------|-----------|-----------------|
+| Laptop (local) | `http://localhost:5601` | same machine |
+| Remote/cloud VM | `http://<PUBLIC_IP>:5601` | SSH into the server |
+
+**Port exposure:**
+- **Kibana (5601)** is accessible on the public IP — open this in your browser.
+- **Elasticsearch (9200)** is bound to `127.0.0.1` only. It is **not** reachable from outside the server. The ingest scripts run on the server itself, so `localhost:9200` works for them. This prevents unauthenticated public access to your event data.
+
+**Firewall rule (cloud VMs):** open TCP 5601 inbound in your security group / firewall.
+
+```bash
+# AWS example
+aws ec2 authorize-security-group-ingress --group-id sg-xxx \
+  --protocol tcp --port 5601 --cidr 0.0.0.0/0
+
+# ufw example
+sudo ufw allow 5601/tcp
+```
+
+---
+
 ## Step 1 — Install ArtiForge
 
 ```bash
@@ -160,7 +184,9 @@ bash scripts/run_lab.sh uc3
 
 ## Step 6 — Explore in Kibana
 
-Open **http://localhost:5601** in your browser.
+Open Kibana in your browser:
+- **Local:** `http://localhost:5601`
+- **Remote server:** `http://<PUBLIC_IP>:5601`
 
 Navigate to **Discover** (left sidebar → magnifying glass icon).
 

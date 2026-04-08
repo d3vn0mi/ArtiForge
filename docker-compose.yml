@@ -15,7 +15,7 @@ services:
     volumes:
       - es-data:/usr/share/elasticsearch/data
     ports:
-      - "9200:9200"
+      - "127.0.0.1:9200:9200"   # localhost only — not exposed on public IP
     networks:
       - artiforge-net
     healthcheck:
