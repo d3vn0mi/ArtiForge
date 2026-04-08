@@ -26,9 +26,22 @@ _ECS_LOG_NAME = {
 
 _ECS_PROVIDER = {
     "Security":    "Microsoft-Windows-Security-Auditing",
-    "System":      "Microsoft-Windows-Eventlog",
+    "System":      "Service Control Manager",
     "Sysmon":      "Microsoft-Windows-Sysmon",
     "Application": "Application",
+}
+
+_ECS_CATEGORY: dict[int, list[str]] = {
+    4624: ["authentication"], 4625: ["authentication"],
+    4634: ["authentication"], 4648: ["authentication"],
+    4672: ["authentication"], 4688: ["process"],
+    4698: ["configuration"],
+    4720: ["iam"],            4732: ["iam"],
+    7045: ["configuration"],
+    1:    ["process"],
+    3:    ["network"],
+    11:   ["file"],
+    13:   ["registry"],
 }
 
 
@@ -40,7 +53,7 @@ def _to_ecs(ev: GeneratedEvent) -> dict:
             "code": str(ev.eid),
             "provider": _ECS_PROVIDER.get(ev.channel, ev.channel),
             "kind": "event",
-            "category": ["process"] if ev.eid in {4688, 1} else ["authentication"],
+            "category": _ECS_CATEGORY.get(ev.eid, ["event"]),
             "outcome": "success",
             "module": "security" if ev.channel == "Security" else ev.channel.lower(),
         },

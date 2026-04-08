@@ -47,7 +47,7 @@ def eid_1(fields: dict, host: Host, user: User | None, timestamp: Any, **_) -> d
         "LogonId": hex(random.randint(0x10000, 0x9FFFF)),
         "TerminalSessionId": fields.get("TerminalSessionId", "1"),
         "IntegrityLevel": fields.get("IntegrityLevel", "High"),
-        "Hashes": fields.get("Hashes", f"SHA256={_fake_sha256()}"),
+        "Hashes": fields.get("Hashes", f"MD5={_fake_md5()},SHA256={_fake_sha256()}"),
         "ParentProcessGuid": _guid(),
         "ParentProcessId": _pid(),
         "ParentImage": fields.get("ParentImage", r"C:\Windows\System32\cmd.exe"),
@@ -117,6 +117,11 @@ def eid_13(fields: dict, host: Host, user: User | None, timestamp: Any, **_) -> 
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _fake_md5() -> str:
+    import secrets
+    return secrets.token_hex(16).upper()
+
 
 def _fake_sha256() -> str:
     import secrets

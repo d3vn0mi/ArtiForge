@@ -28,7 +28,7 @@ def test_list_labs_shows_uc3(runner):
 def test_list_labs_shows_phase_and_event_count(runner):
     result = runner.invoke(main, ["list-labs"])
     assert "5" in result.output   # 5 phases
-    assert "37" in result.output  # 37 events
+    assert "40" in result.output  # 40 events
 
 
 # ── info ──────────────────────────────────────────────────────────────────────
@@ -53,7 +53,7 @@ def test_info_shows_all_phases(runner):
 
 def test_info_shows_totals(runner):
     result = runner.invoke(main, ["info", "--lab", "uc3"])
-    assert "37" in result.output   # total events
+    assert "40" in result.output   # total events
     assert "5" in result.output    # total file artifacts
 
 
@@ -116,7 +116,7 @@ def test_generate_selective_phases(runner, tmp_path):
                                    "--output", str(tmp_path),
                                    "--phases", "1"])
     assert result.exit_code == 0
-    assert "8 events" in result.output
+    assert "9 events" in result.output
 
 
 def test_generate_custom_base_time(runner, tmp_path):
@@ -143,7 +143,7 @@ def test_generate_unknown_lab_fails(runner, tmp_path):
 
 def test_generate_output_mentions_event_count(runner, tmp_path):
     result = runner.invoke(main, ["generate", "--lab", "uc3", "--output", str(tmp_path)])
-    assert "37 events" in result.output
+    assert "40 events" in result.output
 
 
 def test_generate_ndjson_valid(runner, tmp_path):

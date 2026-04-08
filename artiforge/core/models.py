@@ -67,6 +67,7 @@ class EventSpec(BaseModel):
     offset_seconds: int = 0
     host: str | None = None         # override phase-level host
     user: str | None = None         # override phase-level user
+    provider: str | None = None      # overrides channel-based provider name when set
     fields: dict[str, Any] = Field(default_factory=dict)
     repeat: int = 1                 # generate N copies (used for Sysmon 3 bursts)
     repeat_gap_seconds: int = 30    # gap between repeated events

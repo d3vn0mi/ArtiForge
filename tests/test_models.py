@@ -82,5 +82,5 @@ def test_list_labs_includes_uc3():
 def test_list_labs_event_count():
     labs = engine.list_labs()
     uc3 = next(l for l in labs if l["id"] == "uc3")
-    assert uc3["events"] == 37
+    assert uc3["events"] == 40
     assert uc3["phases"] == 5

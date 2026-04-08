@@ -26,7 +26,7 @@ from artiforge.generators import dispatch_event, dispatch_file
 
 _PROVIDER = {
     "Security": ("Microsoft-Windows-Security-Auditing", "{54849625-5478-4994-A5BA-3E3B0328C30D}"),
-    "System":   ("Microsoft-Windows-Eventlog",          "{fc65ddd8-d6ef-4962-83d5-6e5cfe9ce148}"),
+    "System":   ("Service Control Manager",              "{555908d1-a6d7-4695-8e1e-26931d2012f4}"),
     "Sysmon":   ("Microsoft-Windows-Sysmon",            "{5770385F-C22A-43E0-BF4C-06F5698FFBD9}"),
     "Application": ("Application",                      "{00000000-0000-0000-0000-000000000000}"),
 }
@@ -131,6 +131,8 @@ def run(
             user = _resolve_user(host, user_name)
 
             prov_name, prov_guid = _provider(event_spec.channel)
+            if event_spec.provider:
+                prov_name = event_spec.provider
 
             for repeat_idx in range(event_spec.repeat):
                 ts = resolve(
