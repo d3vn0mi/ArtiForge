@@ -429,10 +429,12 @@ attack:
             ParentProcessName: 'C:\Windows\System32\cmd.exe'
 
         # Sysmon 1 — update.exe (cloudflared) process starts
+        # ProcessGuid anchor: all subsequent Sysmon 3 events for this process reference it
         - channel: Sysmon
           eid: 1
           offset_seconds: 17
           fields:
+            ProcessGuid: &update_exe_guid '{CF4A5B6C-7D8E-9F0A-1B2C-3D4E5F6A7B8C}'
             Image: 'C:\ProgramData\Microsoft\Windows\update.exe'
             OriginalFileName: 'cloudflared.exe'
             CommandLine: '"C:\ProgramData\Microsoft\Windows\update.exe" tunnel run --token FAKE_TOKEN'
@@ -447,6 +449,7 @@ attack:
           eid: 3
           offset_seconds: 20
           fields:
+            ProcessGuid: *update_exe_guid
             Image: 'C:\ProgramData\Microsoft\Windows\update.exe'
             User: 'NT AUTHORITY\SYSTEM'
             Protocol: tcp
@@ -462,6 +465,7 @@ attack:
           eid: 3
           offset_seconds: 25
           fields:
+            ProcessGuid: *update_exe_guid
             Image: 'C:\ProgramData\Microsoft\Windows\update.exe'
             User: 'NT AUTHORITY\SYSTEM'
             Protocol: tcp
@@ -477,6 +481,7 @@ attack:
           eid: 3
           offset_seconds: 35
           fields:
+            ProcessGuid: *update_exe_guid
             Image: 'C:\ProgramData\Microsoft\Windows\update.exe'
             User: 'NT AUTHORITY\SYSTEM'
             Protocol: tcp
@@ -492,6 +497,7 @@ attack:
           eid: 3
           offset_seconds: 55
           fields:
+            ProcessGuid: *update_exe_guid
             Image: 'C:\ProgramData\Microsoft\Windows\update.exe'
             User: 'NT AUTHORITY\SYSTEM'
             Protocol: tcp
@@ -507,6 +513,7 @@ attack:
           eid: 3
           offset_seconds: 95
           fields:
+            ProcessGuid: *update_exe_guid
             Image: 'C:\ProgramData\Microsoft\Windows\update.exe'
             User: 'NT AUTHORITY\SYSTEM'
             Protocol: tcp
@@ -620,12 +627,14 @@ attack:
             ParentProcessName: 'C:\Windows\System32\cmd.exe'
 
         # Sysmon 1 — PowerShell process on WS2
+        # ProcessGuid anchor: Sysmon 11 file-create event references the same process
         - channel: Sysmon
           eid: 1
           offset_seconds: 120
           host: WIN-WS2
           user: svc_backup_admin
           fields:
+            ProcessGuid: &ps_exe_guid '{D5E6F7A8-B9C0-D1E2-F3A4-B5C6D7E8F9A0}'
             Image: 'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe'
             CommandLine: 'powershell.exe -NoP -EP Bypass Compress-Archive -Path "C:\Users\svc_backup_admin\Documents\SensitiveDocs\*" -DestinationPath "C:\Users\svc_backup_admin\AppData\Local\Temp\docs_2026.zip"'
             ParentImage: 'C:\Windows\System32\cmd.exe'
@@ -640,6 +649,7 @@ attack:
           host: WIN-WS2
           user: svc_backup_admin
           fields:
+            ProcessGuid: *ps_exe_guid
             Image: 'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe'
             TargetFilename: 'C:\Users\svc_backup_admin\AppData\Local\Temp\docs_2026.zip'
             User: 'WIN-WS2\svc_backup_admin'

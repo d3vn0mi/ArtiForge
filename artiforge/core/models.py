@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -64,18 +64,18 @@ class EventSpec(BaseModel):
     """A single event to generate, as declared in the YAML."""
     channel: str                    # Security | System | Sysmon | Application
     eid: int
-    offset_seconds: int = 0
+    offset_seconds: int = Field(default=0, ge=0)
     host: str | None = None         # override phase-level host
     user: str | None = None         # override phase-level user
     provider: str | None = None      # overrides channel-based provider name when set
     fields: dict[str, Any] = Field(default_factory=dict)
-    repeat: int = 1                 # generate N copies (used for Sysmon 3 bursts)
-    repeat_gap_seconds: int = 30    # gap between repeated events
+    repeat: int = Field(default=1, ge=1)
+    repeat_gap_seconds: int = Field(default=30, ge=0)
 
 
 class FileArtifactSpec(BaseModel):
     """A file to generate on disk as part of the lab staging."""
-    type: str                       # lnk | xsl | inf | xml_task | binary_placeholder | raw
+    type: Literal["lnk", "xsl", "inf", "xml_task", "binary_placeholder", "raw"]
     dest: str                       # Windows-style path (for documentation / metadata)
     content_template: str | None = None
     lnk_target: str | None = None

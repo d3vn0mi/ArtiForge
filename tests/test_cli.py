@@ -4,7 +4,7 @@ import json
 import pytest
 from pathlib import Path
 from click.testing import CliRunner
-from cli import main
+from artiforge.cli import main
 
 
 @pytest.fixture

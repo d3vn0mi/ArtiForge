@@ -5,7 +5,7 @@ Produces a single bulk_import.ndjson compatible with the Elasticsearch Bulk API:
   Content-Type: application/x-ndjson
 
 Each event becomes two lines:
-  {"index": {"_index": "winlogbeat-artiforge-uc3"}}
+  {"index": {"_index": "winlogbeat-artiforge-uc3-20260219_091200"}}
   { ...ECS-flavoured document... }
 """
 
@@ -118,7 +118,10 @@ def export(bundle: ArtifactBundle, output_dir: Path) -> Path:
     """Write bulk_import.ndjson. Return the written path."""
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    index_name = f"winlogbeat-artiforge-{bundle.lab_id}"
+    index_name = (
+        f"winlogbeat-artiforge-{bundle.lab_id}"
+        f"-{bundle.base_time.strftime('%Y%m%d_%H%M%S')}"
+    )
     out_path = output_dir / "bulk_import.ndjson"
 
     lines: list[str] = []

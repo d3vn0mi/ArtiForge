@@ -70,7 +70,7 @@ visible traces.
 
 ## Kibana Setup
 
-- **Index pattern:** `winlogbeat-artiforge-uc3`
+- **Index pattern:** `winlogbeat-artiforge-uc3-*`
 - **Time filter:** `2026-02-19 09:00:00` → `2026-02-19 11:30:00` UTC
 - **Recommended columns:** `@timestamp`, `winlog.event_id`, `host.name`,
   `process.command_line`, `user.name`

@@ -36,7 +36,7 @@ You are a **Tier-2 SOC analyst** performing an initial investigation. You will n
 | Item | Value |
 |------|-------|
 | Kibana URL | `http://localhost:5601` |
-| Index pattern | `winlogbeat-artiforge-uc3` |
+| Index pattern | `winlogbeat-artiforge-uc3-*` |
 | Time filter start | `2026-02-19 09:00:00 UTC` |
 | Time filter end | `2026-02-19 11:30:00 UTC` |
 | Known victim user | `marcus.webb` (domain: `LAB`) |

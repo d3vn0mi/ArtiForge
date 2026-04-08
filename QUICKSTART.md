@@ -162,14 +162,14 @@ Expected output:
 ```
 ==> ArtiForge — Ingest
     File  : artifacts/uc3_.../elastic/bulk_import.ndjson
-    Index : winlogbeat-artiforge-uc3
+    Index : winlogbeat-artiforge-uc3-20260219_091200
     ES    : http://localhost:9200
 
 --> Checking Elasticsearch... ready.
---> Ingesting 37 documents...
-    Indexed : 37
+--> Ingesting 40 documents...
+    Indexed : 40
     Errors  : none
---> Verified: 37 documents in index 'winlogbeat-artiforge-uc3'
+--> Verified: 40 documents in index 'winlogbeat-artiforge-uc3-20260219_091200'
 
 ==> Ingest complete.
 ```

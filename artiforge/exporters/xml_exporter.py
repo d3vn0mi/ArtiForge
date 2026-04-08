@@ -38,8 +38,7 @@ def _build_event_element(ev: GeneratedEvent) -> ET.Element:
     # System
     system = ET.SubElement(event, "System")
 
-    ET.SubElement(system, "Provider").set("Name", ev.provider_name)
-    provider = system.find("Provider")
+    provider = ET.SubElement(system, "Provider")
     provider.set("Name", ev.provider_name)
     provider.set("Guid", ev.provider_guid)
 
