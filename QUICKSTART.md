@@ -9,12 +9,13 @@ ingest them, and hunt through the events in Kibana.
 
 | Tool | Min version | Check |
 |------|------------|-------|
-| Python | 3.10+ | `python --version` |
 | Docker | 24+ | `docker --version` |
 | Docker Compose | v2 | `docker compose version` |
 | curl | any | `curl --version` |
 
 > **RAM:** Elasticsearch needs at least **2 GB free** for the single-node container.
+
+> **Python not required.** ArtiForge runs inside Docker — no local Python install needed.
 
 ---
 
@@ -42,26 +43,26 @@ sudo ufw allow 5601/tcp
 
 ---
 
-## Step 1 — Install ArtiForge
+## Step 1 — Build the ArtiForge Image
 
 ```bash
 git clone <repo-url>
 cd ArtiForge
 
-pip install -r requirements.txt
+docker build -t artiforge:latest .
 ```
 
-Verify the install:
+Verify the image works:
 
 ```bash
-python cli.py list-labs
+./artiforge.sh list-labs
 ```
 
 Expected output:
 ```
 ID           NAME                           PHASES  EVENTS   DESCRIPTION
 ────────────────────────────────────────────────────────────────────────────────
-  uc3        Egg-Cellent Resume                  5      37   LOLBAS execution chain...
+  uc3        Egg-Cellent Resume                  5      40   LOLBAS execution chain...
 ```
 
 ---
@@ -120,10 +121,10 @@ Expected output:
 
 ## Step 4 — Generate Artifacts
 
-Generate all 37 events and 5 file stubs for the UC3 scenario:
+Generate all 40 events and 5 file stubs for the UC3 scenario:
 
 ```bash
-python cli.py generate --lab uc3 --output ./artifacts
+./artiforge.sh generate --lab uc3 --output /work/artifacts
 ```
 
 Output:
@@ -133,7 +134,7 @@ Output:
   [elastic] → artifacts/uc3_20260219_091200/elastic/bulk_import.ndjson
   [files]   → artifacts/uc3_20260219_091200/files  (5 artifacts)
 
-  Summary: 37 events generated
+  Summary: 40 events generated
   Output:  /path/to/ArtiForge/artifacts/uc3_20260219_091200
 ```
 
@@ -141,13 +142,16 @@ Output:
 
 ```bash
 # Use a specific timestamp (useful for repeatable demos)
-python cli.py generate --lab uc3 --base-time "2026-02-19T09:12:00Z"
+./artiforge.sh generate --lab uc3 --base-time "2026-02-19T09:12:00Z"
 
 # Generate only selected phases
-python cli.py generate --lab uc3 --phases 1,4
+./artiforge.sh generate --lab uc3 --phases 1,4
 
 # XML only (skip Elastic NDJSON)
-python cli.py generate --lab uc3 --format xml
+./artiforge.sh generate --lab uc3 --format xml
+
+# Preview without writing files
+./artiforge.sh generate --lab uc3 --dry-run
 ```
 
 ---
@@ -334,7 +338,7 @@ process.command_line : "Compress-Archive" and host.name : "WIN-WS2"
 
 ### Full Timeline View — All Phases
 
-See all 37 events in attack order across all hosts:
+See all 40 events in attack order across all hosts:
 
 ```kql
 artiforge.phase_id : *
