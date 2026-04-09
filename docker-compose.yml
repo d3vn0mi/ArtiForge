@@ -32,7 +32,7 @@ services:
     volumes:
       - es-data:/usr/share/elasticsearch/data
     ports:
-      - "127.0.0.1:9200:9200"   # localhost only — not exposed on public IP
+      - "${ES_HOST:-127.0.0.1}:9200:9200"   # default: localhost only. Set ES_HOST=0.0.0.0 to expose on all interfaces.
     networks:
       - artiforge-net
     healthcheck:
