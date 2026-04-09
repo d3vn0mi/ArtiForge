@@ -411,6 +411,17 @@ def generate(lab: str | None, lab_path: str | None, output: str, fmt: str,
         written.append(ndjson)
         click.echo(f"  [elastic] → {ndjson}")
 
+    # ── Navigator layer (written whenever the lab has MITRE techniques)
+    all_tids = [tid for p in spec.attack.phases for tid in p.mitre]
+    if all_tids:
+        import json as _json
+        from artiforge.mitre.navigator import build_layer as _build_layer
+        layer = _build_layer(spec)
+        nav_path = run_dir / "navigator_layer.json"
+        nav_path.write_text(_json.dumps(layer, indent=2), encoding="utf-8")
+        written.append(nav_path)
+        click.echo(f"  [mitre]   → {nav_path}  ({len(set(all_tids))} techniques)")
+
     # ── File artifacts
     if bundle.files:
         for gen_file in bundle.files:
@@ -485,6 +496,103 @@ def _write_import_md(run_dir: Path, bundle, formats: list[str]):
 
     (run_dir / "IMPORT.md").write_text("\n".join(lines), encoding="utf-8")
 
+
+
+# ── navigator ─────────────────────────────────────────────────────────────────
+
+@main.command("navigator")
+@click.option("--lab", default=None, help="Lab ID (e.g. uc3)")
+@click.option("--lab-path", default=None, type=click.Path(),
+              help="Path to a lab.yaml outside the built-in labs directory")
+@click.option("--output", "-o", default=None,
+              help="Write layer JSON to file (default: <lab_id>_navigator_layer.json)")
+def navigator(lab: str | None, lab_path: str | None, output: str | None):
+    """Export a MITRE ATT&CK Navigator layer JSON for a lab."""
+    if not lab and not lab_path:
+        click.echo("Error: provide --lab <id> or --lab-path <path>", err=True)
+        sys.exit(1)
+
+    try:
+        spec = engine.load_lab_from_path(Path(lab_path)) if lab_path else engine.load_lab(lab)
+    except FileNotFoundError as exc:
+        click.echo(f"Error: {exc}", err=True)
+        sys.exit(1)
+
+    import json
+    from artiforge.mitre.navigator import build_layer
+    layer = build_layer(spec)
+
+    all_tids = sorted({tid for p in spec.attack.phases for tid in p.mitre})
+    out_path = Path(output) if output else Path(f"{spec.lab.id}_navigator_layer.json")
+    out_path.write_text(json.dumps(layer, indent=2), encoding="utf-8")
+
+    click.echo(f"\n[ArtiForge] Navigator layer: {spec.lab.name}")
+    click.echo(f"  {len(all_tids)} techniques  ·  {len(spec.attack.phases)} phases")
+    click.echo(f"  Written to: {out_path.resolve()}")
+    click.echo(f"\n  Open ATT&CK Navigator → Layer → Open Existing Layer → upload file\n")
+
+
+# ── coverage ──────────────────────────────────────────────────────────────────
+
+@main.command("coverage")
+def coverage():
+    """Print a MITRE ATT&CK coverage matrix across all built-in labs."""
+    from artiforge.mitre.technique_names import TECHNIQUE_NAMES
+
+    labs = engine.list_labs()
+    lab_specs: list = []
+    for lab_meta in labs:
+        if "error" in lab_meta:
+            continue
+        try:
+            lab_specs.append(engine.load_lab(lab_meta["id"]))
+        except Exception:
+            continue
+
+    if not lab_specs:
+        click.echo("No labs found.", err=True)
+        sys.exit(1)
+
+    # Collect all technique IDs and which labs cover them
+    # tech_id → set of lab_ids
+    coverage_map: dict[str, set[str]] = {}
+    for spec in lab_specs:
+        for phase in spec.attack.phases:
+            for tid in phase.mitre:
+                coverage_map.setdefault(tid, set()).add(spec.lab.id)
+
+    if not coverage_map:
+        click.echo("No MITRE techniques found in any lab.")
+        return
+
+    sorted_tids = sorted(coverage_map.keys())
+    lab_ids = [s.lab.id for s in lab_specs]
+    tid_w  = max(len(t) for t in sorted_tids)
+    name_w = min(40, max(len(TECHNIQUE_NAMES.get(t, t)) for t in sorted_tids))
+
+    header = f"  {'TECHNIQUE':<{tid_w}}  {'NAME':<{name_w}}"
+    for lid in lab_ids:
+        header += f"  {lid[:8]:>8}"
+    click.echo(f"\n[ArtiForge] MITRE ATT&CK Coverage\n")
+    click.echo(header)
+    click.echo("  " + "─" * (tid_w + 2 + name_w + 2 + len(lab_ids) * 10))
+
+    for tid in sorted_tids:
+        name = TECHNIQUE_NAMES.get(tid, tid)
+        if len(name) > name_w:
+            name = name[:name_w - 1] + "…"
+        row = f"  {tid:<{tid_w}}  {name:<{name_w}}"
+        for lid in lab_ids:
+            symbol = "  ●" if lid in coverage_map[tid] else "  ○"
+            row += f"  {symbol:>8}"
+        click.echo(row)
+
+    total_labs_with_coverage = len({lid for lids in coverage_map.values() for lid in lids})
+    click.echo(
+        f"\n  ● covered  ○ not covered"
+        f"  ·  {len(sorted_tids)} techniques across "
+        f"{total_labs_with_coverage} lab(s)\n"
+    )
 
 
 # ── check ─────────────────────────────────────────────────────────────────────
@@ -743,6 +851,33 @@ def graph(lab: str | None, lab_path: str | None, seed: int | None):
         click.echo("  No ProcessGuid or LogonId correlations found in attack events.")
 
     click.echo()
+
+
+# ── serve ─────────────────────────────────────────────────────────────────────
+
+@main.command("serve")
+@click.option("--host", default="127.0.0.1", show_default=True,
+              help="Interface to bind (use 0.0.0.0 inside Docker)")
+@click.option("--port", default=5000, show_default=True, type=int,
+              help="Port to listen on")
+@click.option("--debug", is_flag=True, default=False, hidden=True,
+              help="Enable Flask debug mode (development only)")
+def serve(host: str, port: int, debug: bool):
+    """Start the ArtiForge web UI (requires Flask: pip install artiforge[web])."""
+    try:
+        from artiforge.web.app import app as flask_app
+    except ImportError:
+        click.echo(
+            "Flask is required for the web UI.\n"
+            "Install it with:  pip install artiforge[web]",
+            err=True,
+        )
+        sys.exit(1)
+
+    click.echo(f"\n[ArtiForge] Web UI")
+    click.echo(f"  http://{host}:{port}")
+    click.echo(f"  Press Ctrl+C to stop.\n")
+    flask_app.run(host=host, port=port, debug=debug)
 
 
 # ── new-lab ───────────────────────────────────────────────────────────────────

@@ -419,3 +419,164 @@ def test_graph_shows_process_or_logon_correlations(runner):
 def test_graph_no_args_fails(runner):
     result = runner.invoke(main, ["graph"])
     assert result.exit_code != 0
+
+
+# ── navigator ─────────────────────────────────────────────────────────────────
+
+def test_navigator_exit_code(runner, tmp_path):
+    out = tmp_path / "layer.json"
+    result = runner.invoke(main, ["navigator", "--lab", "uc3", "--output", str(out)])
+    assert result.exit_code == 0
+
+
+def test_navigator_creates_json_file(runner, tmp_path):
+    out = tmp_path / "layer.json"
+    runner.invoke(main, ["navigator", "--lab", "uc3", "--output", str(out)])
+    assert out.exists()
+
+
+def test_navigator_output_is_valid_json(runner, tmp_path):
+    out = tmp_path / "layer.json"
+    runner.invoke(main, ["navigator", "--lab", "uc3", "--output", str(out)])
+    data = json.loads(out.read_text())
+    assert "techniques" in data
+    assert "name" in data
+
+
+def test_navigator_shows_technique_count(runner, tmp_path):
+    out = tmp_path / "layer.json"
+    result = runner.invoke(main, ["navigator", "--lab", "uc3", "--output", str(out)])
+    assert "techniques" in result.output or "technique" in result.output.lower()
+
+
+def test_navigator_no_args_fails(runner):
+    result = runner.invoke(main, ["navigator"])
+    assert result.exit_code != 0
+
+
+def test_navigator_unknown_lab_fails(runner, tmp_path):
+    out = tmp_path / "layer.json"
+    result = runner.invoke(main, ["navigator", "--lab", "nonexistent_xyz",
+                                   "--output", str(out)])
+    assert result.exit_code != 0
+
+
+# ── coverage ──────────────────────────────────────────────────────────────────
+
+def test_coverage_exit_code(runner):
+    result = runner.invoke(main, ["coverage"])
+    assert result.exit_code == 0
+
+
+def test_coverage_shows_technique_ids(runner):
+    result = runner.invoke(main, ["coverage"])
+    # UC3/UC3N both use T1572 (Protocol Tunneling)
+    assert "T1572" in result.output
+
+
+def test_coverage_shows_lab_ids(runner):
+    result = runner.invoke(main, ["coverage"])
+    assert "uc3" in result.output
+
+
+def test_coverage_shows_filled_symbols(runner):
+    result = runner.invoke(main, ["coverage"])
+    assert "●" in result.output
+
+
+def test_coverage_shows_empty_symbol_legend(runner):
+    result = runner.invoke(main, ["coverage"])
+    assert "○" in result.output
+
+
+# ── generate writes navigator_layer.json ─────────────────────────────────────
+
+def test_generate_writes_navigator_layer(runner, tmp_path):
+    runner.invoke(main, ["generate", "--lab", "uc3", "--output", str(tmp_path)])
+    run_dir = next(tmp_path.glob("uc3_*"))
+    assert (run_dir / "navigator_layer.json").exists()
+
+
+def test_generate_navigator_layer_is_valid(runner, tmp_path):
+    runner.invoke(main, ["generate", "--lab", "uc3", "--output", str(tmp_path)])
+    run_dir = next(tmp_path.glob("uc3_*"))
+    data = json.loads((run_dir / "navigator_layer.json").read_text())
+    assert data["domain"] == "enterprise-attack"
+    assert len(data["techniques"]) > 0
+
+
+def test_generate_output_mentions_mitre(runner, tmp_path):
+    result = runner.invoke(main, ["generate", "--lab", "uc3", "--output", str(tmp_path)])
+    assert "[mitre]" in result.output
+
+
+# ── serve (Flask optional) ────────────────────────────────────────────────────
+
+def test_serve_help(runner):
+    result = runner.invoke(main, ["serve", "--help"])
+    assert result.exit_code == 0
+    assert "host" in result.output.lower() or "port" in result.output.lower()
+
+
+# ── web UI routes ─────────────────────────────────────────────────────────────
+
+pytest_flask = pytest.importorskip("flask", reason="Flask not installed")
+
+
+@pytest.fixture
+def web_client():
+    from artiforge.web.app import app as flask_app
+    flask_app.config["TESTING"] = True
+    with flask_app.test_client() as client:
+        yield client
+
+
+def test_web_index_returns_200(web_client):
+    response = web_client.get("/")
+    assert response.status_code == 200
+
+
+def test_web_index_lists_labs(web_client):
+    data = response = web_client.get("/")
+    assert b"uc3" in response.data
+
+
+def test_web_lab_detail_returns_200(web_client):
+    response = web_client.get("/lab/uc3")
+    assert response.status_code == 200
+
+
+def test_web_lab_detail_shows_lab_name(web_client):
+    response = web_client.get("/lab/uc3")
+    assert b"Egg-Cellent" in response.data
+
+
+def test_web_lab_timeline_tab(web_client):
+    response = web_client.get("/lab/uc3?tab=timeline&seed=0")
+    assert response.status_code == 200
+    assert b"timeline" in response.data.lower()
+
+
+def test_web_lab_dashboard_tab(web_client):
+    response = web_client.get("/lab/uc3?tab=dashboard&seed=0")
+    assert response.status_code == 200
+    assert b"FIRED" in response.data or b"NOT" in response.data
+
+
+def test_web_lab_overview_tab(web_client):
+    response = web_client.get("/lab/uc3?tab=overview&seed=0")
+    assert response.status_code == 200
+    assert b"Infrastructure" in response.data
+
+
+def test_web_unknown_lab_returns_404(web_client):
+    response = web_client.get("/lab/nonexistent_xyz")
+    assert response.status_code == 404
+
+
+def test_web_lab_with_seed(web_client):
+    r1 = web_client.get("/lab/uc3?seed=42")
+    r2 = web_client.get("/lab/uc3?seed=42")
+    assert r1.status_code == 200
+    # Same seed → deterministic output, same content length
+    assert len(r1.data) == len(r2.data)

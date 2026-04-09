@@ -107,17 +107,21 @@ Better guardrails for scenario authors.
 
 ---
 
-## v0.5 — MITRE ATT&CK Integration & Web UI (current)
+## v0.5 — MITRE ATT&CK Integration & Web UI ✓
 
 ### MITRE ATT&CK Integration
-- [ ] Navigator layer JSON export for each lab (techniques highlighted per phase)
-- [ ] Inline technique IDs in generated event descriptions
-- [ ] Coverage matrix: which techniques each built-in lab exercises
+- [x] Navigator layer JSON export for each lab (techniques highlighted per phase)
+  — `artiforge navigator --lab uc3` and auto-written by `artiforge generate`
+- [x] Inline technique IDs in generated events — `mitre_techniques` field on
+  `GeneratedEvent`; emitted as ECS `threat.technique.id/name` in Elasticsearch
+- [x] Coverage matrix — `artiforge coverage` prints a techniques × labs table
 
 ### Web UI (optional, Docker only)
-- [ ] Browser-based lab browser + one-click generation
-- [ ] Timeline visualisation rendered from the bundle without Kibana
-- [ ] Trainer dashboard: show expected detections alongside generated events
+- [x] Browser-based lab browser — `artiforge serve` (requires `pip install artiforge[web]`)
+- [x] Timeline visualisation rendered from the bundle without Kibana
+  — colour-coded by phase, noise toggle, per-phase filter, MITRE badges
+- [x] Trainer dashboard — detection rule results (fired/not, match counts,
+  coverage %) and phase summary alongside the generated event timeline
 
 ---
 

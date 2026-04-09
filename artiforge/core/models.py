@@ -145,6 +145,7 @@ class GeneratedEvent(BaseModel):
     event_data: dict[str, str] = Field(default_factory=dict)
     phase_id: int = 0
     phase_name: str = ""
+    mitre_techniques: list[str] = Field(default_factory=list)  # ATT&CK technique IDs
 
     @property
     def event_id(self) -> int:

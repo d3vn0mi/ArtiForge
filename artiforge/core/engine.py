@@ -218,6 +218,7 @@ def run(
                         event_data=event_data,
                         phase_id=phase.id,
                         phase_name=phase.name,
+                        mitre_techniques=list(phase.mitre),
                     )
                 )
                 record_id += 1

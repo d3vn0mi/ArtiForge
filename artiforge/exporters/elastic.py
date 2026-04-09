@@ -15,6 +15,7 @@ import json
 from pathlib import Path
 
 from artiforge.core.models import ArtifactBundle, GeneratedEvent
+from artiforge.mitre.technique_names import TECHNIQUE_NAMES
 
 # Map ArtiForge channel names → ECS log.name values
 _ECS_LOG_NAME = {
@@ -145,6 +146,17 @@ def _to_ecs(ev: GeneratedEvent) -> dict:
         doc["network"] = {
             "protocol": ed.get("Protocol", "tcp"),
             "direction": "egress",
+        }
+
+    # MITRE ATT&CK threat fields (ECS threat.* namespace)
+    if ev.mitre_techniques:
+        tids = ev.mitre_techniques
+        doc["threat"] = {
+            "framework": "MITRE ATT&CK",
+            "technique": {
+                "id":   tids,
+                "name": [TECHNIQUE_NAMES.get(t, t) for t in tids],
+            },
         }
 
     return doc
