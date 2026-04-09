@@ -855,15 +855,29 @@ def graph(lab: str | None, lab_path: str | None, seed: int | None):
 
 # ── serve ─────────────────────────────────────────────────────────────────────
 
+def _in_docker() -> bool:
+    """Return True when running inside a Docker container."""
+    import os
+    return os.path.exists("/.dockerenv")
+
+
 @main.command("serve")
-@click.option("--host", default="127.0.0.1", show_default=True,
-              help="Interface to bind (use 0.0.0.0 inside Docker)")
+@click.option("--host", default=None,
+              help="Interface to bind. Defaults to 0.0.0.0 inside Docker, 127.0.0.1 otherwise.")
 @click.option("--port", default=5000, show_default=True, type=int,
               help="Port to listen on")
 @click.option("--debug", is_flag=True, default=False, hidden=True,
               help="Enable Flask debug mode (development only)")
-def serve(host: str, port: int, debug: bool):
-    """Start the ArtiForge web UI (requires Flask: pip install artiforge[web])."""
+def serve(host: str | None, port: int, debug: bool):
+    """Start the ArtiForge web UI.
+
+    \b
+    Local:  artiforge serve
+            → http://localhost:5000
+
+    Docker: docker run --rm -p 5000:5000 artiforge serve
+            → http://localhost:5000  (on host browser)
+    """
     try:
         from artiforge.web.app import app as flask_app
     except ImportError:
@@ -874,10 +888,13 @@ def serve(host: str, port: int, debug: bool):
         )
         sys.exit(1)
 
+    effective_host = host or ("0.0.0.0" if _in_docker() else "127.0.0.1")
+    display_host   = "localhost" if effective_host in ("127.0.0.1", "0.0.0.0") else effective_host
+
     click.echo(f"\n[ArtiForge] Web UI")
-    click.echo(f"  http://{host}:{port}")
+    click.echo(f"  http://{display_host}:{port}")
     click.echo(f"  Press Ctrl+C to stop.\n")
-    flask_app.run(host=host, port=port, debug=debug)
+    flask_app.run(host=effective_host, port=port, debug=debug)
 
 
 # ── new-lab ───────────────────────────────────────────────────────────────────
