@@ -1,0 +1,659 @@
+# ============================================================
+# ArtiForge — Lab Specification
+# UC3-N: Egg-Cellent Resume (Noisy)
+#
+# Identical attack to UC3 (LOLBAS → persistence → Veeam pivot →
+# Cloudflared C2 → RDP lateral movement) but with:
+#
+#   1. noise: blocks on every host — trainees must filter signal
+#      from background activity before hunting
+#   2. jitter_seconds on attack events — timestamps are organically
+#      spread rather than perfectly round-numbered
+#   3. repeat_jitter_seconds on C2 connection attempts — realistic
+#      backoff with variance, not identical gaps
+#
+# Recommended generation:
+#   ./artiforge.sh generate --lab uc3n --seed 1337
+#   ./artiforge.sh generate --lab uc3n --jitter 8
+# ============================================================
+
+lab:
+  id: uc3n
+  name: "Egg-Cellent Resume (Noisy)"
+  description: >
+    Same LOLBAS + Cloudflared + Veeam pivot attack as UC3, now surrounded by
+    realistic background noise across all four hosts. Trainees must distinguish
+    attacker activity from normal workday traffic before they can answer the
+    hunt questions.
+  mitre_version: "v14"
+
+# ── Infrastructure (identical to UC3) ─────────────────────────────────────────
+infrastructure:
+  domain: lab.local
+  hosts:
+    WIN-WS1:
+      ip: 10.10.10.10
+      fqdn: WIN-WS1.lab.local
+      os: "Windows 10 22H2"
+      sid_prefix: "S-1-5-21-3456789012-2345678901-1234567890"
+      users:
+        - username: marcus.webb
+          domain: LAB
+          rid: 1001
+
+    WIN-WS2:
+      ip: 10.10.10.11
+      fqdn: WIN-WS2.lab.local
+      os: "Windows 10 22H2"
+      sid_prefix: "S-1-5-21-3456789012-2345678901-1111111111"
+      users:
+        - username: svc_backup_admin
+          domain: WIN-WS2
+          rid: 1100
+
+    WIN-DC1:
+      ip: 10.10.10.2
+      fqdn: WIN-DC1.lab.local
+      os: "Windows Server 2019"
+      sid_prefix: "S-1-5-21-3456789012-2345678901-2222222222"
+      users:
+        - username: administrator
+          domain: LAB
+          rid: 500
+
+    WIN-BACKUP1:
+      ip: 10.10.10.20
+      fqdn: WIN-BACKUP1.lab.local
+      os: "Windows Server 2019"
+      sid_prefix: "S-1-5-21-3456789012-2345678901-3333333333"
+      users:
+        - username: svc_backup_admin
+          domain: WIN-BACKUP1
+          rid: 1100
+
+# ── Attack specification ───────────────────────────────────────────────────────
+attack:
+  base_time: "2026-02-19T09:12:00Z"
+  malicious_account: svc_backup_admin
+
+  # ── Noise configuration ──────────────────────────────────────────────────────
+  # Each block adds benign background events tagged phase_id=0/phase_name="noise".
+  # Use the KQL filter  NOT artiforge.phase_name : "noise"  to strip them out
+  # and focus on the attack path.  Remove the filter to see the full picture.
+  noise:
+
+    # WIN-WS1 — marcus.webb's workstation: heavy user-day activity
+    # Trainees must spot the LOLBAS chain among normal Office / Chrome / svchost events
+    - host: WIN-WS1
+      spread_minutes: 150       # covers the full scenario window
+      logon_pairs: 5            # screen-lock/unlock + one RDP session from IT
+      process_spawns: 25        # Office, Chrome, svchost, RuntimeBroker, etc.
+      dns_queries: 20           # normal browsing (microsoft.com, google.com, …)
+
+    # WIN-DC1 — domain controller: constant Kerberos + network logon traffic
+    # A real DC sees dozens of Type-3 and Type-10 logons per minute.
+    # No attack events appear on DC1 in this scenario — all noise events here
+    # are deliberate red herrings that trainees should rule out.
+    - host: WIN-DC1
+      spread_minutes: 150
+      logon_pairs: 18           # heavy: every domain logon routes through the DC
+      process_spawns: 6         # AD sync, replication health, GPO processing
+      dns_queries: 0            # DCs serve DNS; outbound queries are unusual
+
+    # WIN-WS2 — the lateral-movement target: quiet until phase 5
+    # Normal workday ends once the attacker RDPs in (~T+120m).
+    # spread_minutes: 115 keeps noise before the attacker arrives.
+    - host: WIN-WS2
+      spread_minutes: 115
+      logon_pairs: 3            # normal svc_backup_admin maintenance sessions
+      process_spawns: 12        # typical workstation: Chrome, Edge, svchost
+      dns_queries: 10           # normal browsing
+
+    # WIN-BACKUP1 — backup server: steady but low-volume background
+    # Attacker creates svc_backup_admin here (~T+63m); noise simulates
+    # legitimate pre-existing service activity on the same host.
+    - host: WIN-BACKUP1
+      spread_minutes: 150
+      logon_pairs: 2            # scheduled admin maintenance windows
+      process_spawns: 10        # Veeam agent processes, Windows health checks
+      dns_queries: 4            # Windows Update checks, telemetry
+
+  phases:
+
+    # ──────────────────────────────────────────────────────────────────────────
+    # PHASE 01 — Initial Access: Resume Lure Execution
+    # T1204.002 · T1566.001 · T1218 · T1218.010
+    # Host: WIN-WS1 · User: marcus.webb · T+0
+    # ──────────────────────────────────────────────────────────────────────────
+    - id: 1
+      name: "Initial Access — Resume Lure"
+      mitre: [T1204.002, T1566.001, T1218, T1218.010]
+      offset_minutes: 0
+      host: WIN-WS1
+      user: marcus.webb
+
+      events:
+        - channel: Security
+          eid: 4624
+          offset_seconds: 0
+          jitter_seconds: 4       # small organic variance on logon timestamp
+          fields:
+            TargetUserName: marcus.webb
+            TargetDomainName: LAB
+            LogonType: '2'
+            LogonProcessName: User32
+            AuthenticationPackageName: Negotiate
+            WorkstationName: WIN-WS1
+            IpAddress: '-'
+            IpPort: '-'
+            ProcessName: 'C:\Windows\System32\winlogon.exe'
+
+        - channel: Sysmon
+          eid: 11
+          offset_seconds: 2
+          jitter_seconds: 3
+          fields:
+            Image: 'C:\Windows\System32\cmd.exe'
+            TargetFilename: 'C:\Users\marcus.webb\AppData\Local\Temp\ie4uinit_setup.inf'
+            User: 'LAB\marcus.webb'
+
+        - channel: Sysmon
+          eid: 11
+          offset_seconds: 3
+          jitter_seconds: 3
+          fields:
+            Image: 'C:\Windows\System32\cmd.exe'
+            TargetFilename: 'C:\ProgramData\MicrosoftEdgeUpdate\style.xsl'
+            User: 'LAB\marcus.webb'
+
+        - channel: Security
+          eid: 4688
+          offset_seconds: 5
+          jitter_seconds: 2
+          fields:
+            SubjectUserName: marcus.webb
+            SubjectDomainName: LAB
+            NewProcessName: 'C:\Windows\System32\ie4uinit.exe'
+            CommandLine: 'C:\Windows\System32\ie4uinit.exe -BaseSettings'
+            ParentProcessName: 'C:\Windows\explorer.exe'
+            TokenElevationType: '%%1938'
+
+        - channel: Sysmon
+          eid: 1
+          offset_seconds: 5
+          jitter_seconds: 2
+          fields:
+            Image: 'C:\Windows\System32\ie4uinit.exe'
+            OriginalFileName: 'IE4UINIT.EXE'
+            CommandLine: 'C:\Windows\System32\ie4uinit.exe -BaseSettings'
+            ParentImage: 'C:\Windows\explorer.exe'
+            ParentCommandLine: 'C:\Windows\explorer.exe'
+            User: 'LAB\marcus.webb'
+            IntegrityLevel: Medium
+            Hashes: 'SHA256=B14F8C49BB14C3C2CB6BFF963AED36E0DB98B9CA7E1769BE41C89DA21FB6B74A'
+
+        - channel: Security
+          eid: 4688
+          offset_seconds: 8
+          jitter_seconds: 2
+          fields:
+            SubjectUserName: marcus.webb
+            SubjectDomainName: LAB
+            NewProcessName: 'C:\Windows\System32\msxsl.exe'
+            CommandLine: 'msxsl.exe C:\ProgramData\MicrosoftEdgeUpdate\style.xsl C:\ProgramData\MicrosoftEdgeUpdate\data.xml'
+            ParentProcessName: 'C:\Windows\System32\ie4uinit.exe'
+
+        - channel: Sysmon
+          eid: 1
+          offset_seconds: 8
+          jitter_seconds: 2
+          fields:
+            Image: 'C:\Windows\System32\msxsl.exe'
+            OriginalFileName: 'msxsl.exe'
+            CommandLine: 'msxsl.exe C:\ProgramData\MicrosoftEdgeUpdate\style.xsl C:\ProgramData\MicrosoftEdgeUpdate\data.xml'
+            ParentImage: 'C:\Windows\System32\ie4uinit.exe'
+            ParentCommandLine: 'C:\Windows\System32\ie4uinit.exe -BaseSettings'
+            User: 'LAB\marcus.webb'
+            IntegrityLevel: Medium
+            Hashes: 'SHA256=C2E3A6D1FA0D4A8E2B1F3D9C7E4B5A6F8D2C1E0A9B3F4D5E6C7A8B9D0E1F2A3'
+
+        - channel: Security
+          eid: 4688
+          offset_seconds: 10
+          jitter_seconds: 2
+          fields:
+            SubjectUserName: marcus.webb
+            SubjectDomainName: LAB
+            NewProcessName: 'C:\Windows\System32\cmd.exe'
+            CommandLine: 'cmd.exe /c whoami && net user'
+            ParentProcessName: 'C:\Windows\System32\msxsl.exe'
+
+        - channel: Sysmon
+          eid: 1
+          offset_seconds: 10
+          jitter_seconds: 2
+          fields:
+            Image: 'C:\Windows\System32\cmd.exe'
+            OriginalFileName: 'Cmd.Exe'
+            CommandLine: 'cmd.exe /c whoami && net user'
+            ParentImage: 'C:\Windows\System32\msxsl.exe'
+            ParentCommandLine: 'msxsl.exe C:\ProgramData\MicrosoftEdgeUpdate\style.xsl C:\ProgramData\MicrosoftEdgeUpdate\data.xml'
+            User: 'LAB\marcus.webb'
+            IntegrityLevel: Medium
+            Hashes: 'SHA256=975B9D4F0EBF8C4B0E2A6D8C1F3E5A7B9D0C2E4F6A8B0D2E4F6A8B0D2E4F6A8'
+
+      file_artifacts:
+        - type: lnk
+          dest: 'C:\Users\marcus.webb\Desktop\Resume_John_Smith.lnk'
+          lnk_target: 'C:\Windows\System32\ie4uinit.exe'
+          lnk_args: '-BaseSettings'
+        - type: inf
+          dest: 'C:\Users\marcus.webb\AppData\Local\Temp\ie4uinit_setup.inf'
+        - type: xsl
+          dest: 'C:\ProgramData\MicrosoftEdgeUpdate\style.xsl'
+
+    # ──────────────────────────────────────────────────────────────────────────
+    # PHASE 02 — Persistence: Scheduled Task via XML
+    # T1053.005
+    # Host: WIN-WS1 · User: marcus.webb · T+15m
+    # ──────────────────────────────────────────────────────────────────────────
+    - id: 2
+      name: "Persistence — Scheduled Task via XML"
+      mitre: [T1053.005]
+      offset_minutes: 15
+      host: WIN-WS1
+      user: marcus.webb
+
+      events:
+        - channel: Sysmon
+          eid: 11
+          offset_seconds: 5
+          jitter_seconds: 5
+          fields:
+            Image: 'C:\Windows\System32\cmd.exe'
+            TargetFilename: 'C:\ProgramData\MicrosoftEdgeUpdate\update.txt'
+            User: 'LAB\marcus.webb'
+
+        - channel: Security
+          eid: 4688
+          offset_seconds: 8
+          jitter_seconds: 3
+          fields:
+            SubjectUserName: marcus.webb
+            SubjectDomainName: LAB
+            NewProcessName: 'C:\Windows\System32\schtasks.exe'
+            CommandLine: 'schtasks /Create /TN "MicrosoftEdgeUpdateTaskMachineUA" /XML C:\ProgramData\MicrosoftEdgeUpdate\update.txt /F'
+            ParentProcessName: 'C:\Windows\System32\cmd.exe'
+
+        - channel: Sysmon
+          eid: 1
+          offset_seconds: 8
+          jitter_seconds: 3
+          fields:
+            Image: 'C:\Windows\System32\schtasks.exe'
+            OriginalFileName: 'schtasks.exe'
+            CommandLine: 'schtasks /Create /TN "MicrosoftEdgeUpdateTaskMachineUA" /XML C:\ProgramData\MicrosoftEdgeUpdate\update.txt /F'
+            ParentImage: 'C:\Windows\System32\cmd.exe'
+            User: 'LAB\marcus.webb'
+            IntegrityLevel: High
+            Hashes: 'SHA256=1A2B3C4D5E6F7A8B9C0D1E2F3A4B5C6D7E8F9A0B1C2D3E4F5A6B7C8D9E0F1A2'
+
+        - channel: Security
+          eid: 4698
+          offset_seconds: 9
+          jitter_seconds: 3
+          fields:
+            SubjectUserName: marcus.webb
+            SubjectDomainName: LAB
+            TaskName: '\MicrosoftEdgeUpdateTaskMachineUA'
+
+        - channel: Sysmon
+          eid: 13
+          offset_seconds: 10
+          jitter_seconds: 3
+          fields:
+            Image: 'C:\Windows\System32\schtasks.exe'
+            TargetObject: 'HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\TaskCache\Tasks\{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}\Actions'
+            Details: 'Binary Data'
+            User: 'LAB\marcus.webb'
+
+      file_artifacts:
+        - type: xml_task
+          dest: 'C:\ProgramData\MicrosoftEdgeUpdate\update.txt'
+
+    # ──────────────────────────────────────────────────────────────────────────
+    # PHASE 03 — Veeam Pivot Outcome
+    # T1210 · T1136.001 · T1078
+    # Hosts: WIN-WS1 + WIN-BACKUP1 · T+60m
+    # ──────────────────────────────────────────────────────────────────────────
+    - id: 3
+      name: "Veeam Pivot — Credential Extraction Outcome"
+      mitre: [T1210, T1136.001, T1078]
+      offset_minutes: 60
+      host: WIN-WS1
+      user: marcus.webb
+
+      events:
+        - channel: Sysmon
+          eid: 3
+          offset_seconds: 0
+          jitter_seconds: 8
+          host: WIN-WS1
+          fields:
+            Image: 'C:\Windows\System32\cmd.exe'
+            User: 'LAB\marcus.webb'
+            Protocol: tcp
+            Initiated: 'true'
+            SourceIp: 10.10.10.10
+            SourceHostname: WIN-WS1.lab.local
+            DestinationIp: 10.10.10.20
+            DestinationHostname: WIN-BACKUP1.lab.local
+            DestinationPort: 9401
+            DestinationPortName: '-'
+
+        - channel: Security
+          eid: 4688
+          offset_seconds: 120
+          jitter_seconds: 10
+          host: WIN-WS1
+          fields:
+            SubjectUserName: marcus.webb
+            SubjectDomainName: LAB
+            NewProcessName: 'C:\Windows\System32\wbem\wmic.exe'
+            CommandLine: 'wmic /node:10.10.10.20 process list brief'
+            ParentProcessName: 'C:\Windows\System32\cmd.exe'
+
+        - channel: Sysmon
+          eid: 1
+          offset_seconds: 120
+          jitter_seconds: 10
+          host: WIN-WS1
+          fields:
+            Image: 'C:\Windows\System32\wbem\wmic.exe'
+            CommandLine: 'wmic /node:10.10.10.20 process list brief'
+            ParentImage: 'C:\Windows\System32\cmd.exe'
+            User: 'LAB\marcus.webb'
+            Hashes: 'SHA256=2B3C4D5E6F7A8B9C0D1E2F3A4B5C6D7E8F9A0B1C2D3E4F5A6B7C8D9E0F1A2B3'
+
+        - channel: Security
+          eid: 4720
+          offset_seconds: 180
+          jitter_seconds: 6
+          host: WIN-BACKUP1
+          fields:
+            SubjectUserName: VEEAMBACKUP$
+            SubjectDomainName: WIN-BACKUP1
+            TargetUserName: svc_backup_admin
+            TargetDomainName: WIN-BACKUP1
+
+        - channel: Security
+          eid: 4732
+          offset_seconds: 185
+          jitter_seconds: 4
+          host: WIN-BACKUP1
+          fields:
+            SubjectUserName: VEEAMBACKUP$
+            SubjectDomainName: WIN-BACKUP1
+            MemberName: svc_backup_admin
+            TargetUserName: Administrators
+            TargetDomainName: WIN-BACKUP1
+
+        - channel: Security
+          eid: 4648
+          offset_seconds: 200
+          jitter_seconds: 8
+          host: WIN-BACKUP1
+          user: svc_backup_admin
+          fields:
+            SubjectUserName: marcus.webb
+            SubjectDomainName: LAB
+            TargetUserName: svc_backup_admin
+            TargetDomainName: WIN-BACKUP1
+            TargetServerName: WIN-BACKUP1
+            TargetInfo: WIN-BACKUP1.lab.local
+            ProcessName: 'C:\Windows\System32\svchost.exe'
+            IpAddress: 10.10.10.10
+            IpPort: '49823'
+
+    # ──────────────────────────────────────────────────────────────────────────
+    # PHASE 04 — Covert C2: Cloudflared Tunnel (blocked)
+    # T1572 · T1543.003 · T1036.004
+    # Host: WIN-WS1 · T+90m
+    #
+    # NOTE: repeat_jitter_seconds on the Sysmon 3 beacons gives each retry
+    # attempt a random ±12s variance around the base gap — more realistic
+    # than perfectly uniform backoff intervals.
+    # ──────────────────────────────────────────────────────────────────────────
+    - id: 4
+      name: "Covert C2 — Cloudflared Installed as Masqueraded Service"
+      mitre: [T1572, T1543.003, T1036.004]
+      offset_minutes: 90
+      host: WIN-WS1
+      user: marcus.webb
+
+      events:
+        - channel: Sysmon
+          eid: 11
+          offset_seconds: 5
+          jitter_seconds: 5
+          fields:
+            Image: 'C:\Windows\System32\cmd.exe'
+            TargetFilename: 'C:\ProgramData\Microsoft\Windows\update.exe'
+            User: 'LAB\marcus.webb'
+
+        - channel: Security
+          eid: 4688
+          offset_seconds: 10
+          jitter_seconds: 3
+          fields:
+            SubjectUserName: marcus.webb
+            SubjectDomainName: LAB
+            NewProcessName: 'C:\Windows\System32\sc.exe'
+            CommandLine: 'sc create Wuauserv_Svc binPath= "C:\ProgramData\Microsoft\Windows\update.exe tunnel run --token FAKE_TOKEN" start= auto'
+            ParentProcessName: 'C:\Windows\System32\cmd.exe'
+
+        - channel: Sysmon
+          eid: 1
+          offset_seconds: 10
+          jitter_seconds: 3
+          fields:
+            Image: 'C:\Windows\System32\sc.exe'
+            CommandLine: 'sc create Wuauserv_Svc binPath= "C:\ProgramData\Microsoft\Windows\update.exe tunnel run --token FAKE_TOKEN" start= auto'
+            ParentImage: 'C:\Windows\System32\cmd.exe'
+            User: 'LAB\marcus.webb'
+            Hashes: 'SHA256=3C4D5E6F7A8B9C0D1E2F3A4B5C6D7E8F9A0B1C2D3E4F5A6B7C8D9E0F1A2B3C4'
+
+        - channel: System
+          eid: 7045
+          offset_seconds: 12
+          jitter_seconds: 2
+          fields:
+            ServiceName: Wuauserv_Svc
+            ImagePath: 'C:\ProgramData\Microsoft\Windows\update.exe tunnel run --token FAKE_TOKEN'
+            ServiceType: 'user mode service'
+            StartType: 'auto start'
+            AccountName: LocalSystem
+
+        - channel: Security
+          eid: 4688
+          offset_seconds: 15
+          jitter_seconds: 2
+          fields:
+            SubjectUserName: marcus.webb
+            SubjectDomainName: LAB
+            NewProcessName: 'C:\Windows\System32\sc.exe'
+            CommandLine: 'sc start Wuauserv_Svc'
+            ParentProcessName: 'C:\Windows\System32\cmd.exe'
+
+        - channel: Sysmon
+          eid: 1
+          offset_seconds: 17
+          jitter_seconds: 2
+          fields:
+            ProcessGuid: &update_exe_guid '{CF4A5B6C-7D8E-9F0A-1B2C-3D4E5F6A7B8C}'
+            Image: 'C:\ProgramData\Microsoft\Windows\update.exe'
+            OriginalFileName: 'cloudflared.exe'
+            CommandLine: '"C:\ProgramData\Microsoft\Windows\update.exe" tunnel run --token FAKE_TOKEN'
+            ParentImage: 'C:\Windows\System32\services.exe'
+            User: 'NT AUTHORITY\SYSTEM'
+            IntegrityLevel: System
+            Hashes: 'SHA256=A1B2C3D4E5F6A7B8C9D0E1F2A3B4C5D6E7F8A9B0C1D2E3F4A5B6C7D8E9F0A1B2'
+
+        # 5 connection attempts with ±12s jitter on each gap (more organic backoff)
+        - channel: Sysmon
+          eid: 3
+          offset_seconds: 20
+          repeat: 5
+          repeat_gap_seconds: 30
+          repeat_jitter_seconds: 12
+          fields:
+            ProcessGuid: *update_exe_guid
+            Image: 'C:\ProgramData\Microsoft\Windows\update.exe'
+            User: 'NT AUTHORITY\SYSTEM'
+            Protocol: tcp
+            Initiated: 'true'
+            SourceIp: 10.10.10.10
+            SourceHostname: WIN-WS1.lab.local
+            DestinationIp: 198.41.192.227
+            DestinationHostname: region2.v2.argotunnel.com
+            DestinationPort: 443
+            DestinationPortName: https
+
+        - channel: Application
+          eid: 1
+          offset_seconds: 210
+          jitter_seconds: 10
+          provider: cloudflared
+          fields:
+            Data: >
+              2026-02-19T10:42:22Z ERR Failed to create tunnel
+              error="failed to connect to edge: dial tcp
+              198.41.192.227:443: connect: connection timed out"
+
+      file_artifacts:
+        - type: binary_placeholder
+          dest: 'C:\ProgramData\Microsoft\Windows\update.exe'
+
+    # ──────────────────────────────────────────────────────────────────────────
+    # PHASE 05 — Lateral Movement + File Staging
+    # T1021.001 · T1550.002 · T1560.001
+    # Hosts: WIN-WS1 (source) + WIN-WS2 (target) · T+120m
+    # ──────────────────────────────────────────────────────────────────────────
+    - id: 5
+      name: "Lateral Movement — RDP to WIN-WS2 + File Staging"
+      mitre: [T1021.001, T1550.002, T1560.001]
+      offset_minutes: 120
+      host: WIN-WS1
+      user: marcus.webb
+
+      events:
+        - channel: Sysmon
+          eid: 3
+          offset_seconds: 0
+          jitter_seconds: 5
+          host: WIN-WS1
+          fields:
+            Image: 'C:\Windows\System32\mstsc.exe'
+            User: 'LAB\marcus.webb'
+            Protocol: tcp
+            Initiated: 'true'
+            SourceIp: 10.10.10.10
+            SourceHostname: WIN-WS1.lab.local
+            DestinationIp: 10.10.10.11
+            DestinationHostname: WIN-WS2.lab.local
+            DestinationPort: 3389
+            DestinationPortName: 'ms-wbt-server'
+
+        - channel: Security
+          eid: 4648
+          offset_seconds: 1
+          jitter_seconds: 3
+          host: WIN-WS1
+          fields:
+            SubjectUserName: marcus.webb
+            SubjectDomainName: LAB
+            TargetUserName: svc_backup_admin
+            TargetDomainName: WIN-WS2
+            TargetServerName: WIN-WS2
+            TargetInfo: WIN-WS2.lab.local
+            ProcessName: 'C:\Windows\System32\mstsc.exe'
+            IpAddress: 10.10.10.10
+            IpPort: '0'
+
+        - channel: Security
+          eid: 4624
+          offset_seconds: 5
+          jitter_seconds: 3
+          host: WIN-WS2
+          user: svc_backup_admin
+          fields:
+            TargetUserName: svc_backup_admin
+            TargetDomainName: WIN-WS2
+            LogonType: '10'
+            LogonProcessName: User32
+            AuthenticationPackageName: Negotiate
+            WorkstationName: WIN-WS1
+            IpAddress: 10.10.10.10
+            IpPort: '49843'
+            ProcessName: 'C:\Windows\System32\winlogon.exe'
+
+        - channel: Security
+          eid: 4672
+          offset_seconds: 6
+          jitter_seconds: 2
+          host: WIN-WS2
+          user: svc_backup_admin
+          fields:
+            SubjectUserName: svc_backup_admin
+            SubjectDomainName: WIN-WS2
+
+        - channel: Security
+          eid: 4688
+          offset_seconds: 120
+          jitter_seconds: 15
+          host: WIN-WS2
+          user: svc_backup_admin
+          fields:
+            SubjectUserName: svc_backup_admin
+            SubjectDomainName: WIN-WS2
+            NewProcessName: 'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe'
+            CommandLine: 'powershell.exe -NoP -EP Bypass Compress-Archive -Path "C:\Users\svc_backup_admin\Documents\SensitiveDocs\*" -DestinationPath "C:\Users\svc_backup_admin\AppData\Local\Temp\docs_2026.zip"'
+            ParentProcessName: 'C:\Windows\System32\cmd.exe'
+
+        - channel: Sysmon
+          eid: 1
+          offset_seconds: 120
+          jitter_seconds: 15
+          host: WIN-WS2
+          user: svc_backup_admin
+          fields:
+            ProcessGuid: &ps_exe_guid '{D5E6F7A8-B9C0-D1E2-F3A4-B5C6D7E8F9A0}'
+            Image: 'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe'
+            CommandLine: 'powershell.exe -NoP -EP Bypass Compress-Archive -Path "C:\Users\svc_backup_admin\Documents\SensitiveDocs\*" -DestinationPath "C:\Users\svc_backup_admin\AppData\Local\Temp\docs_2026.zip"'
+            ParentImage: 'C:\Windows\System32\cmd.exe'
+            User: 'WIN-WS2\svc_backup_admin'
+            IntegrityLevel: High
+            Hashes: 'SHA256=9F86D081884C7D659A2FEAA0C55AD015A3BF4F1B2B0B822CD15D6C15B0F00A08'
+
+        - channel: Sysmon
+          eid: 11
+          offset_seconds: 135
+          jitter_seconds: 10
+          host: WIN-WS2
+          user: svc_backup_admin
+          fields:
+            ProcessGuid: *ps_exe_guid
+            Image: 'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe'
+            TargetFilename: 'C:\Users\svc_backup_admin\AppData\Local\Temp\docs_2026.zip'
+            User: 'WIN-WS2\svc_backup_admin'
+
+        - channel: Security
+          eid: 4634
+          offset_seconds: 300
+          jitter_seconds: 20
+          host: WIN-WS2
+          user: svc_backup_admin
+          fields:
+            TargetUserName: svc_backup_admin
+            TargetDomainName: WIN-WS2
+            LogonType: '10'
