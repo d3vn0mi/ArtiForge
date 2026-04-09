@@ -1,20 +1,52 @@
 # ArtiForge
 
 > YAML-driven Windows event artifact generator for cybersecurity training labs.
+> Built by [D3vn0mi](https://github.com/D3vn0mi) · v0.1 · [MIT License](LICENSE) · [Roadmap](ROADMAP.md)
 
-ArtiForge generates realistic Windows event logs (Security, System, Sysmon, Application)
+ArtiForge generates realistic Windows event logs (Security, System, Sysmon, PowerShell, Application)
 and supporting file stubs from a declarative YAML lab specification. Output can be
-imported directly into Elasticsearch or opened in Windows Event Viewer.
+imported directly into Elasticsearch/Kibana or opened in Windows Event Viewer.
 
 ---
 
 ## Quick Start
 
+### Python (local install)
+
 ```bash
 pip install -e .
 
+artiforge list-labs
+artiforge generate --lab uc3
+artiforge generate --lab uc3 --dry-run
+```
+
+### Docker (no Python required)
+
+```bash
+# Build once
+docker build -t artiforge:latest .
+
+# Run any command — output lands in ./artifacts/ on your host
+./artiforge.sh list-labs
+./artiforge.sh generate --lab uc3
+./artiforge.sh generate --lab uc3 --dry-run
+```
+
+The wrapper script (`artiforge.sh`) mounts your current directory into the
+container and forwards all arguments. Generated artifacts are written directly
+to `./artifacts/` on your host, owned by your user.
+
+---
+
+## All Commands
+
+```bash
 # List available labs
 artiforge list-labs
+
+# Detailed lab info
+artiforge info --lab uc3
 
 # Generate all UC3 artifacts (XML + Elastic NDJSON)
 artiforge generate --lab uc3
@@ -22,20 +54,24 @@ artiforge generate --lab uc3
 # Preview what would be generated (no files written)
 artiforge generate --lab uc3 --dry-run
 
-# Selective phases only
+# Selective phases
 artiforge generate --lab uc3 --phases 1,4 --output ./test_out
 
 # Custom base timestamp
 artiforge generate --lab uc3 --base-time "2026-03-01T08:00:00Z"
 
-# Use a lab YAML outside the built-in labs directory
+# Use a lab YAML from anywhere on disk
 artiforge generate --lab-path /home/analyst/mylab/lab.yaml
 
-# Validate a lab before generating
+# Validate before generating (schema + EID coverage check)
 artiforge validate --lab uc3
 artiforge validate --lab-path /home/analyst/mylab/lab.yaml
 
-# Print the JSON Schema for IDE autocompletion
+# Scaffold a new lab from the built-in template
+artiforge new-lab --id my-scenario --name "My Attack Scenario" --output ~/mylabs
+
+# Print or save the JSON Schema for IDE autocompletion
+artiforge schema
 artiforge schema --output artiforge/labs/lab.schema.json
 ```
 
@@ -47,7 +83,7 @@ artiforge schema --output artiforge/labs/lab.schema.json
 artifacts/
 └── uc3_20260219_091200/
     ├── events/
-    │   ├── WIN-WS1_Security.xml     # importable via Windows Event Viewer
+    │   ├── WIN-WS1_Security.xml      # importable via Windows Event Viewer
     │   ├── WIN-WS1_Sysmon.xml
     │   ├── WIN-WS1_System.xml
     │   ├── WIN-WS1_Application.xml
@@ -55,12 +91,12 @@ artifacts/
     │   ├── WIN-WS2_Security.xml
     │   └── WIN-WS2_Sysmon.xml
     ├── elastic/
-    │   └── bulk_import.ndjson       # Elasticsearch bulk API format
+    │   └── bulk_import.ndjson        # Elasticsearch bulk API format
     ├── files/
-    │   ├── phase01/                 # LNK lure, XSL stylesheet, INF file
-    │   ├── phase02/                 # XML task definition (.txt extension)
-    │   └── phase04/                 # cloudflared placeholder README
-    └── IMPORT.md                    # step-by-step import instructions
+    │   ├── phase01/                  # LNK lure, XSL stylesheet, INF file
+    │   ├── phase02/                  # XML task definition
+    │   └── phase04/                  # cloudflared placeholder
+    └── IMPORT.md                     # step-by-step import instructions
 ```
 
 ---
@@ -69,26 +105,35 @@ artifacts/
 
 | ID  | Name | Phases | Description |
 |-----|------|--------|-------------|
-| uc3 | Egg-Cellent Resume | 5 | LOLBAS + Cloudflared + Veeam Pivot |
+| uc3 | Egg-Cellent Resume | 5 | LOLBAS + Cloudflared + Veeam CVE-2023-27532 pivot |
+
+See [ROADMAP.md](ROADMAP.md) for the planned lab library (UC4–UC10).
 
 ---
 
 ## Adding a New Lab
 
-1. Create your `lab.yaml` anywhere — no need to place it inside the package:
-   ```bash
-   mkdir ~/mylab && cp artiforge/labs/uc3/lab.yaml ~/mylab/lab.yaml
-   # edit ~/mylab/lab.yaml
-   artiforge validate --lab-path ~/mylab/lab.yaml
-   artiforge generate --lab-path ~/mylab/lab.yaml
-   ```
-2. For IDE autocompletion, run `artiforge schema -o artiforge/labs/lab.schema.json`
-   and install the Red Hat YAML extension — every field will autocomplete inline.
-3. Run `artiforge validate` before generating to catch schema and EID errors early.
+```bash
+# 1. Scaffold from the built-in template
+artiforge new-lab --id uc4-kerberoast --name "Kerberoasting Lab" --output ~/mylabs
+
+# 2. Fill in every FIXME in the generated lab.yaml
+#    (see artiforge/labs/_template/DEVELOPMENT.md for the full authoring guide)
+
+# 3. Validate
+artiforge validate --lab-path ~/mylabs/uc4-kerberoast/lab.yaml
+
+# 4. Generate
+artiforge generate --lab-path ~/mylabs/uc4-kerberoast/lab.yaml
+```
+
+**VS Code autocompletion:** install the Red Hat YAML extension and the
+`.vscode/settings.json` in this repo wires the JSON Schema automatically —
+every field autocompletes with inline documentation.
 
 **No Python code changes required** as long as your scenario uses the supported EIDs.
-If you need an EID that isn't listed below, add a generator function following the
-pattern in `artiforge/generators/security.py`.
+To add a new EID, add a generator function following the pattern in
+`artiforge/generators/security.py` (see [ROADMAP.md](ROADMAP.md) — v0.2 coverage expansion).
 
 ### Supported EIDs
 
@@ -118,3 +163,9 @@ pattern in `artiforge/generators/security.py`.
 
 T1204.002 · T1566.001 · T1218 · T1218.010 · T1053.005 · T1210 · T1136.001 · T1078 ·
 T1572 · T1543.003 · T1036.004 · T1021.001 · T1550.002 · T1560.001
+
+---
+
+## License
+
+MIT — see [LICENSE](LICENSE). Built by [D3vn0mi](https://github.com/D3vn0mi).
