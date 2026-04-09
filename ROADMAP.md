@@ -3,7 +3,7 @@
 > Maintained by [D3vn0mi](https://github.com/D3vn0mi)
 
 This document tracks planned improvements across four dimensions:
-event coverage, export integrations, realism, and lab ecosystem.
+event coverage, realism, lab ecosystem, and export integrations.
 Items within each milestone are roughly ordered by priority.
 
 ---
@@ -66,28 +66,7 @@ The core generator layer needs a wider net before more scenarios can be built.
 
 ---
 
-## v0.3 — Export & Integration
-
-Make artifacts importable into more SIEM/EDR platforms without manual transformation.
-
-### New Export Formats
-- [ ] **Splunk HEC** — JSON payload for the HTTP Event Collector (`/services/collector/event`)
-- [ ] **Microsoft Sentinel** — Log Analytics workspace JSON (`LogManagementAPI` table format)
-- [ ] **QRadar LEEF** — Log Event Extended Format for IBM QRadar
-- [ ] **CEF** — Common Event Format (ArcSight, generic syslog destinations)
-
-### Elastic Improvements
-- [ ] Detection rule NDJSON export (EQL/KQL stubs with MITRE metadata)
-- [ ] Index template + ILM policy auto-creation on first import
-- [ ] Kibana saved search + dashboard NDJSON alongside the bulk import
-
-### Reporting
-- [ ] HTML timeline report — chronological event table with phase colour-coding,
-  rendered from the bundle without requiring Kibana
-
----
-
-## v0.4 — Realism & Noise
+## v0.3 — Realism & Noise
 
 Real environments are noisy. Artifacts generated in total silence are easy to detect
 as synthetic. This milestone adds controllable realism layers.
@@ -113,7 +92,7 @@ as synthetic. This milestone adds controllable realism layers.
 
 ---
 
-## v0.5 — Lab Quality & Tooling
+## v0.4 — Lab Quality & Tooling
 
 Better guardrails for scenario authors.
 
@@ -159,6 +138,27 @@ A standalone tool is useful; a curated library is a training platform.
 - [ ] GitHub Actions CI: test matrix across Python 3.10/3.11/3.12
 - [ ] Pre-built Docker image on GitHub Container Registry (`ghcr.io/d3vn0mi/artiforge`)
 - [ ] Signed releases with checksums
+
+---
+
+## v1.1 — Export & Integration
+
+Make artifacts importable into more SIEM/EDR platforms without manual transformation.
+
+### New Export Formats
+- [ ] **Splunk HEC** — JSON payload for the HTTP Event Collector (`/services/collector/event`)
+- [ ] **Microsoft Sentinel** — Log Analytics workspace JSON (`LogManagementAPI` table format)
+- [ ] **QRadar LEEF** — Log Event Extended Format for IBM QRadar
+- [ ] **CEF** — Common Event Format (ArcSight, generic syslog destinations)
+
+### Elastic Improvements
+- [ ] Detection rule NDJSON export (EQL/KQL stubs with MITRE metadata)
+- [ ] Index template + ILM policy auto-creation on first import
+- [ ] Kibana saved search + dashboard NDJSON alongside the bulk import
+
+### Reporting
+- [ ] HTML timeline report — chronological event table with phase colour-coding,
+  rendered from the bundle without requiring Kibana
 
 ---
 
