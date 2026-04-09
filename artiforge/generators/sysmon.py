@@ -32,7 +32,15 @@ def _pid() -> str:
 
 
 def _guid() -> str:
-    return f"{{{str(uuid.uuid4()).upper()}}}"
+    """Random GUID using the seeded random module so --seed produces deterministic output."""
+    parts = [
+        f"{random.getrandbits(32):08X}",
+        f"{random.getrandbits(16):04X}",
+        f"{(random.getrandbits(12) | 0x4000):04X}",
+        f"{(random.getrandbits(14) | 0x8000):04X}",
+        f"{random.getrandbits(48):012X}",
+    ]
+    return "{" + "-".join(parts) + "}"
 
 
 def _stable_guid(seed: str) -> str:

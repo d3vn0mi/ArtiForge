@@ -239,8 +239,19 @@ def info(lab: str):
     "--dry-run", is_flag=True, default=False,
     help="Preview what would be generated without writing any files",
 )
+@click.option(
+    "--seed",
+    default=None, type=int,
+    help="RNG seed for deterministic generation (same seed → identical output)",
+)
+@click.option(
+    "--jitter",
+    default=0, type=int, show_default=True,
+    help="Global timestamp jitter: each event timestamp is shifted ±N seconds randomly",
+)
 def generate(lab: str | None, lab_path: str | None, output: str, fmt: str,
-             phases: str | None, base_time: str | None, dry_run: bool):
+             phases: str | None, base_time: str | None, dry_run: bool,
+             seed: int | None, jitter: int):
     """Generate event log artifacts and file stubs for a lab scenario."""
 
     if not lab and not lab_path:
@@ -281,7 +292,13 @@ def generate(lab: str | None, lab_path: str | None, output: str, fmt: str,
     # Run generation
     click.echo(f"\n[ArtiForge] Generating artifacts for lab: {spec.lab.name}")
     try:
-        bundle = engine.run(spec, base_time_override=base_dt, phase_filter=phase_filter)
+        bundle = engine.run(
+            spec,
+            base_time_override=base_dt,
+            phase_filter=phase_filter,
+            seed=seed,
+            jitter_seconds=jitter,
+        )
     except Exception as exc:
         click.echo(f"Error during generation: {exc}", err=True)
         raise

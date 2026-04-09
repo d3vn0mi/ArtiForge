@@ -65,29 +65,28 @@ The core generator layer needs a wider net before more scenarios can be built.
 
 ---
 
-## v0.3 — Realism & Noise
+## v0.3 — Realism & Noise ✓ (current)
 
 Real environments are noisy. Artifacts generated in total silence are easy to detect
 as synthetic. This milestone adds controllable realism layers.
 
 ### Background Noise
-- [ ] `noise:` section in lab YAML — inject configurable volumes of benign events
+- [x] `noise:` section in lab YAML — inject configurable volumes of benign events
   (user logons, process creation, DNS queries) that trainees must filter out
-- [ ] Common process allowlist (explorer.exe, chrome.exe, svchost.exe) with
-  realistic parent/child chains
-- [ ] Randomised logon/logoff pairs throughout the timeline
+- [x] Common process allowlist (chrome.exe, svchost.exe, RuntimeBroker.exe, etc.)
+  with realistic parent/child chains
+- [x] Randomised logon/logoff pairs (Security 4624 + 4634) throughout the timeline
 
 ### Field Variation
-- [ ] `--seed` flag for deterministic but varied field values (PIDs, GUIDs, ports)
+- [x] `--seed` flag for deterministic but varied field values (PIDs, GUIDs, ports)
   so each generation run looks different while remaining reproducible
-- [ ] Slight timestamp jitter within a configurable window (±N seconds)
-- [ ] Random ProcessGuid / LogonGuid generation mode alongside YAML anchors
+- [x] `--jitter N` global timestamp jitter: each event is shifted ±N seconds
+- [x] Per-event `jitter_seconds` field in YAML for fine-grained control
+- [x] GUIDs generated via seeded RNG (fully deterministic under `--seed`)
 
-### Multi-User Activity
-- [ ] Concurrent session simulation: multiple users active on the same host
-  produce interleaved events with correct `SubjectLogonId` correlations
-- [ ] Beaconing pattern helper: Sysmon 3 repeat with configurable jitter
-  instead of fixed `repeat_gap_seconds`
+### Beaconing Pattern
+- [x] `repeat_jitter_seconds` on EventSpec: adds ±N second variation to each
+  inter-beacon interval for more realistic C2 timing patterns
 
 ---
 

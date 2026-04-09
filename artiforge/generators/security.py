@@ -29,8 +29,15 @@ def _pid() -> str:
 
 
 def _new_logon_guid() -> str:
-    import uuid
-    return "{" + str(uuid.uuid4()).upper() + "}"
+    """Random GUID using the seeded random module so --seed produces deterministic output."""
+    parts = [
+        f"{random.getrandbits(32):08X}",
+        f"{random.getrandbits(16):04X}",
+        f"{(random.getrandbits(12) | 0x4000):04X}",   # version 4
+        f"{(random.getrandbits(14) | 0x8000):04X}",   # variant 1
+        f"{random.getrandbits(48):012X}",
+    ]
+    return "{" + "-".join(parts) + "}"
 
 
 def _null_guid() -> str:

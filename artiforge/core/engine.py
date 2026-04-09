@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import importlib.resources
-from datetime import datetime, timezone
+import random as _random
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import yaml
@@ -20,6 +20,7 @@ from artiforge.core.models import (
 )
 from artiforge.core.timeline import parse_base_time, resolve
 from artiforge.generators import dispatch_event, dispatch_file
+from artiforge.generators import noise as _noise_gen
 
 
 # ── Provider metadata ──────────────────────────────────────────────────────────
@@ -109,8 +110,21 @@ def run(
     spec: LabSpec,
     base_time_override: datetime | None = None,
     phase_filter: list[int] | None = None,
+    seed: int | None = None,
+    jitter_seconds: int = 0,
 ) -> ArtifactBundle:
-    """Generate all artifacts for a lab spec."""
+    """Generate all artifacts for a lab spec.
+
+    Args:
+        spec: Validated lab specification.
+        base_time_override: Override the base_time from the YAML.
+        phase_filter: Restrict generation to these phase IDs only.
+        seed: RNG seed for deterministic generation. None = random each run.
+        jitter_seconds: Global ±N second timestamp jitter applied to every event.
+            Per-event jitter_seconds takes precedence when non-zero.
+    """
+    if seed is not None:
+        _random.seed(seed)
 
     base_time = base_time_override or parse_base_time(spec.attack.base_time)
 
@@ -146,12 +160,28 @@ def run(
             if event_spec.provider:
                 prov_name = event_spec.provider
 
+            # Effective per-event jitter (event-level overrides global)
+            ev_jitter = event_spec.jitter_seconds or jitter_seconds
+
+            # Track cumulative offset separately so repeat_jitter applies
+            # to each inter-event gap, not to the total from zero.
+            cumulative_gap = event_spec.offset_seconds
+
             for repeat_idx in range(event_spec.repeat):
-                ts = resolve(
-                    phase_base,
-                    0,
-                    event_spec.offset_seconds + repeat_idx * event_spec.repeat_gap_seconds,
-                )
+                if repeat_idx > 0:
+                    interval = event_spec.repeat_gap_seconds
+                    if event_spec.repeat_jitter_seconds:
+                        interval += _random.randint(
+                            -event_spec.repeat_jitter_seconds,
+                            event_spec.repeat_jitter_seconds,
+                        )
+                    cumulative_gap += interval
+
+                ts = resolve(phase_base, 0, cumulative_gap)
+
+                # Apply timestamp jitter
+                if ev_jitter:
+                    ts = ts + timedelta(seconds=_random.randint(-ev_jitter, ev_jitter))
 
                 event_data = dispatch_event(
                     channel=event_spec.channel,
@@ -185,5 +215,18 @@ def run(
             gen_file = dispatch_file(fa_spec, phase)
             if gen_file:
                 bundle.files.append(gen_file)
+
+    # Noise injection — only when not running a phase-filtered subset
+    if not phase_filter and spec.attack.noise:
+        for noise_spec in spec.attack.noise:
+            host = _resolve_host(spec, noise_spec.host)
+            noise_events = _noise_gen.generate(
+                noise_spec=noise_spec,
+                host=host,
+                base_time=base_time,
+                record_id_start=record_id,
+            )
+            bundle.events.extend(noise_events)
+            record_id += len(noise_events)
 
     return bundle
