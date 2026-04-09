@@ -3,7 +3,7 @@
 import pytest
 from datetime import datetime, timezone
 from artiforge.core.models import Host, User
-from artiforge.generators import security, system, sysmon, application, powershell
+from artiforge.generators import security, system, sysmon, application, powershell, wmi
 
 
 # ── Shared fixtures ───────────────────────────────────────────────────────────
@@ -316,3 +316,331 @@ def test_unknown_sysmon_eid_raises(host, user, ts, spec_stub):
 def test_unknown_system_eid_raises(host, user, ts, spec_stub):
     with pytest.raises(ValueError, match="not implemented"):
         system.generate(9999, {}, host, user, spec_stub, ts)
+
+
+# ── Security EID 4768 — Kerberos TGT ─────────────────────────────────────────
+
+def test_4768_tgt_fields(host, user, ts, spec_stub):
+    result = security.generate(4768, {
+        "TargetUserName": "marcus.webb",
+        "Status": "0x0",
+    }, host, user, spec_stub, ts)
+    assert result["TargetUserName"] == "marcus.webb"
+    assert result["Status"] == "0x0"
+    assert result["ServiceName"] == "krbtgt"
+    assert "TicketOptions" in result
+    assert "TicketEncryptionType" in result
+
+
+def test_4768_defaults(host, user, ts, spec_stub):
+    result = security.generate(4768, {}, host, user, spec_stub, ts)
+    assert result["TargetUserName"] == "marcus.webb"
+    assert result["PreAuthType"] == "15"
+
+
+# ── Security EID 4769 — Kerberos Service Ticket ───────────────────────────────
+
+def test_4769_service_ticket(host, user, ts, spec_stub):
+    result = security.generate(4769, {
+        "ServiceName": "cifs/WIN-FS1",
+        "Status": "0x0",
+    }, host, user, spec_stub, ts)
+    assert result["ServiceName"] == "cifs/WIN-FS1"
+    assert result["Status"] == "0x0"
+    assert "TicketOptions" in result
+
+
+# ── Security EID 4771 — Kerberos Pre-auth Failed ─────────────────────────────
+
+def test_4771_preauth_failed(host, user, ts, spec_stub):
+    result = security.generate(4771, {
+        "Status": "0x18",
+        "PreAuthType": "2",
+    }, host, user, spec_stub, ts)
+    assert result["Status"] == "0x18"
+    assert result["PreAuthType"] == "2"
+    assert "TargetUserName" in result
+
+
+# ── Security EID 4723/4724 — Password Change/Reset ───────────────────────────
+
+def test_4723_password_change(host, user, ts, spec_stub):
+    result = security.generate(4723, {
+        "TargetUserName": "marcus.webb",
+    }, host, user, spec_stub, ts)
+    assert result["TargetUserName"] == "marcus.webb"
+    assert "SubjectUserName" in result
+
+
+def test_4724_password_reset(host, user, ts, spec_stub):
+    result = security.generate(4724, {
+        "TargetUserName": "svc_backup_admin",
+    }, host, user, spec_stub, ts)
+    assert result["TargetUserName"] == "svc_backup_admin"
+    assert "TargetSid" in result
+
+
+# ── Security EID 4725/4726 — Account Disabled/Deleted ────────────────────────
+
+def test_4725_account_disabled(host, user, ts, spec_stub):
+    result = security.generate(4725, {
+        "TargetUserName": "victim.user",
+    }, host, user, spec_stub, ts)
+    assert result["TargetUserName"] == "victim.user"
+    assert "SubjectUserName" in result
+
+
+def test_4726_account_deleted(host, user, ts, spec_stub):
+    result = security.generate(4726, {
+        "TargetUserName": "victim.user",
+    }, host, user, spec_stub, ts)
+    assert result["TargetUserName"] == "victim.user"
+    assert result["PrimaryGroupId"] == "513"
+
+
+# ── Security EID 4656/4663 — Object Access ────────────────────────────────────
+
+def test_4656_handle_request(host, user, ts, spec_stub):
+    result = security.generate(4656, {
+        "ObjectName": r"C:\Windows\System32\lsass.exe",
+        "ObjectType": "File",
+        "AccessMask": "0x1410",
+    }, host, user, spec_stub, ts)
+    assert result["ObjectName"] == r"C:\Windows\System32\lsass.exe"
+    assert result["ObjectType"] == "File"
+    assert result["AccessMask"] == "0x1410"
+    assert "SubjectUserName" in result
+
+
+def test_4663_object_access(host, user, ts, spec_stub):
+    result = security.generate(4663, {
+        "ObjectName": r"C:\Windows\System32\lsass.DMP",
+        "ObjectType": "File",
+    }, host, user, spec_stub, ts)
+    assert result["ObjectName"] == r"C:\Windows\System32\lsass.DMP"
+    assert "AccessList" in result
+    assert "ProcessName" in result
+
+
+# ── Security EID 4657 — Registry Modified ─────────────────────────────────────
+
+def test_4657_registry_modified(host, user, ts, spec_stub):
+    result = security.generate(4657, {
+        "ObjectValueName": "Updater",
+        "NewValue": r"C:\ProgramData\update.exe",
+    }, host, user, spec_stub, ts)
+    assert result["ObjectValueName"] == "Updater"
+    assert result["NewValue"] == r"C:\ProgramData\update.exe"
+    assert "ObjectName" in result
+
+
+# ── Security EID 4670 — Permissions Changed ───────────────────────────────────
+
+def test_4670_permissions_changed(host, user, ts, spec_stub):
+    result = security.generate(4670, {
+        "ObjectName": r"C:\ProgramData\update.exe",
+    }, host, user, spec_stub, ts)
+    assert result["ObjectName"] == r"C:\ProgramData\update.exe"
+    assert "OldSd" in result
+    assert "NewSd" in result
+
+
+# ── Security EID 5156/5157 — WFP Allowed/Blocked ─────────────────────────────
+
+def test_5156_wfp_allowed(host, user, ts, spec_stub):
+    result = security.generate(5156, {
+        "DestAddress": "8.8.8.8",
+        "DestPort": "443",
+    }, host, user, spec_stub, ts)
+    assert result["DestAddress"] == "8.8.8.8"
+    assert result["DestPort"] == "443"
+    assert result["SourceAddress"] == "10.10.10.10"
+    assert "ProcessID" in result
+
+
+def test_5157_wfp_blocked(host, user, ts, spec_stub):
+    result = security.generate(5157, {
+        "DestAddress": "198.41.192.227",
+    }, host, user, spec_stub, ts)
+    assert result["DestAddress"] == "198.41.192.227"
+    assert "ProcessID" in result
+
+
+# ── Security EID 4946/4947 — Firewall Rules ───────────────────────────────────
+
+def test_4946_firewall_rule_added(host, user, ts, spec_stub):
+    result = security.generate(4946, {
+        "RuleName": "Allow Outbound Update",
+        "Direction": "Outbound",
+    }, host, user, spec_stub, ts)
+    assert result["RuleName"] == "Allow Outbound Update"
+    assert result["Direction"] == "Outbound"
+    assert "ApplicationPath" in result
+
+
+def test_4947_firewall_rule_modified(host, user, ts, spec_stub):
+    result = security.generate(4947, {
+        "RuleName": "Allow Outbound Update",
+    }, host, user, spec_stub, ts)
+    assert result["RuleName"] == "Allow Outbound Update"
+    assert "ModifyingApplication" in result
+
+
+# ── Sysmon EID 5 — Process Terminated ────────────────────────────────────────
+
+def test_sysmon5_process_terminated(host, user, ts, spec_stub):
+    result = sysmon.generate(5, {
+        "Image": r"C:\Windows\System32\cmd.exe",
+    }, host, user, spec_stub, ts)
+    assert result["Image"] == r"C:\Windows\System32\cmd.exe"
+    assert "UtcTime" in result
+    assert "ProcessGuid" in result
+
+
+# ── Sysmon EID 7 — Image Loaded ──────────────────────────────────────────────
+
+def test_sysmon7_image_loaded(host, user, ts, spec_stub):
+    result = sysmon.generate(7, {
+        "ImageLoaded": r"C:\Windows\System32\amsi.dll",
+        "Signed": "true",
+    }, host, user, spec_stub, ts)
+    assert result["ImageLoaded"] == r"C:\Windows\System32\amsi.dll"
+    assert result["Signed"] == "true"
+    assert "Hashes" in result
+    assert "Signature" in result
+
+
+# ── Sysmon EID 8 — CreateRemoteThread ────────────────────────────────────────
+
+def test_sysmon8_remote_thread(host, user, ts, spec_stub):
+    result = sysmon.generate(8, {
+        "SourceImage": r"C:\Windows\System32\cmd.exe",
+        "TargetImage": r"C:\Windows\System32\lsass.exe",
+        "GrantedAccess": "0x1fffff",
+    }, host, user, spec_stub, ts)
+    assert result["SourceImage"] == r"C:\Windows\System32\cmd.exe"
+    assert result["TargetImage"] == r"C:\Windows\System32\lsass.exe"
+    assert "NewThreadId" in result
+    assert "StartAddress" in result
+
+
+# ── Sysmon EID 10 — ProcessAccess ────────────────────────────────────────────
+
+def test_sysmon10_process_access(host, user, ts, spec_stub):
+    result = sysmon.generate(10, {
+        "TargetImage": r"C:\Windows\System32\lsass.exe",
+        "GrantedAccess": "0x1010",
+    }, host, user, spec_stub, ts)
+    assert result["TargetImage"] == r"C:\Windows\System32\lsass.exe"
+    assert result["GrantedAccess"] == "0x1010"
+    assert "CallTrace" in result
+    assert "SourceUser" in result
+
+
+# ── Sysmon EID 12/14 — Registry Create/Rename ────────────────────────────────
+
+def test_sysmon12_registry_create(host, user, ts, spec_stub):
+    result = sysmon.generate(12, {
+        "TargetObject": r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Run\Updater",
+        "EventType": "CreateKey",
+    }, host, user, spec_stub, ts)
+    assert "HKLM" in result["TargetObject"]
+    assert result["EventType"] == "CreateKey"
+
+
+def test_sysmon14_registry_rename(host, user, ts, spec_stub):
+    result = sysmon.generate(14, {
+        "TargetObject": r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Run\Updater",
+        "NewName": r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Run\WindowsUpdate",
+    }, host, user, spec_stub, ts)
+    assert "NewName" in result
+    assert "WindowsUpdate" in result["NewName"]
+
+
+# ── Sysmon EID 17/18 — Named Pipe ────────────────────────────────────────────
+
+def test_sysmon17_pipe_created(host, user, ts, spec_stub):
+    result = sysmon.generate(17, {
+        "PipeName": r"\\.\pipe\MSSE-1234-server",
+    }, host, user, spec_stub, ts)
+    assert result["PipeName"] == r"\\.\pipe\MSSE-1234-server"
+    assert result["EventType"] == "CreatePipe"
+
+
+def test_sysmon18_pipe_connected(host, user, ts, spec_stub):
+    result = sysmon.generate(18, {
+        "PipeName": r"\\.\pipe\MSSE-1234-server",
+    }, host, user, spec_stub, ts)
+    assert result["PipeName"] == r"\\.\pipe\MSSE-1234-server"
+    assert result["EventType"] == "ConnectPipe"
+
+
+# ── Sysmon EID 23 — FileDelete ────────────────────────────────────────────────
+
+def test_sysmon23_file_delete(host, user, ts, spec_stub):
+    result = sysmon.generate(23, {
+        "TargetFilename": r"C:\Temp\payload.exe",
+        "IsExecutable": "true",
+    }, host, user, spec_stub, ts)
+    assert result["TargetFilename"] == r"C:\Temp\payload.exe"
+    assert result["IsExecutable"] == "true"
+    assert "Hashes" in result
+
+
+# ── Sysmon EID 25 — ProcessTampering ─────────────────────────────────────────
+
+def test_sysmon25_process_tampering(host, user, ts, spec_stub):
+    result = sysmon.generate(25, {
+        "Image": r"C:\Windows\System32\svchost.exe",
+        "Type": "Image is locked for reading",
+    }, host, user, spec_stub, ts)
+    assert result["Image"] == r"C:\Windows\System32\svchost.exe"
+    assert result["Type"] == "Image is locked for reading"
+    assert "ProcessGuid" in result
+
+
+# ── WMI EID 5857 — Provider Loaded ───────────────────────────────────────────
+
+def test_wmi5857_provider_loaded(host, user, ts, spec_stub):
+    result = wmi.generate(5857, {
+        "ProviderName": "WmiPerfClass",
+    }, host, user, spec_stub, ts)
+    assert result["ProviderName"] == "WmiPerfClass"
+    assert "NamespaceName" in result
+    assert "HostProcess" in result
+
+
+# ── WMI EID 5860 — Temporary Subscription ────────────────────────────────────
+
+def test_wmi5860_temp_subscription(host, user, ts, spec_stub):
+    result = wmi.generate(5860, {
+        "ConsumerName": 'NTEventLogEventConsumer.Name="SCM Event Log Consumer"',
+        "Query": "SELECT * FROM __InstanceCreationEvent WHERE TargetInstance ISA 'Win32_Process'",
+    }, host, user, spec_stub, ts)
+    assert "SCM Event Log" in result["ConsumerName"]
+    assert "Win32_Process" in result["Query"]
+    assert "NamespaceName" in result
+
+
+# ── WMI EID 5861 — Permanent Subscription ────────────────────────────────────
+
+def test_wmi5861_permanent_subscription(host, user, ts, spec_stub):
+    result = wmi.generate(5861, {
+        "ConsumerName": 'CommandLineEventConsumer.Name="EvilConsumer"',
+        "ConsumerPath": r"C:\Windows\System32\cmd.exe /c C:\Temp\evil.exe",
+    }, host, user, spec_stub, ts)
+    assert "EvilConsumer" in result["ConsumerName"]
+    assert "evil.exe" in result["ConsumerPath"]
+    assert "Query" in result
+    assert "NamespaceName" in result
+
+
+def test_wmi5861_defaults(host, user, ts, spec_stub):
+    result = wmi.generate(5861, {}, host, user, spec_stub, ts)
+    assert "ConsumerName" in result
+    assert "Query" in result
+
+
+def test_unknown_wmi_eid_raises(host, user, ts, spec_stub):
+    with pytest.raises(ValueError, match="not implemented"):
+        wmi.generate(9999, {}, host, user, spec_stub, ts)

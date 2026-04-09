@@ -30,6 +30,7 @@ _PROVIDER = {
     "Sysmon":      ("Microsoft-Windows-Sysmon",            "{5770385F-C22A-43E0-BF4C-06F5698FFBD9}"),
     "Application": ("Application",                         "{00000000-0000-0000-0000-000000000000}"),
     "PowerShell":  ("Microsoft-Windows-PowerShell",        "{A0C1853B-5C40-4B15-8766-3CF1C58F985A}"),
+    "WMI":         ("Microsoft-Windows-WMI-Activity",      "{1418EF04-B0B4-4623-BF7E-D74AB47BBDAA}"),
 }
 
 

@@ -256,6 +256,314 @@ def eid_4776(fields: dict, host: Host, user: User | None, **_) -> dict:
     }
 
 
+# ── EID 4768 — Kerberos TGT Requested ───────────────────────────────────────
+
+def eid_4768(fields: dict, host: Host, user: User | None, **_) -> dict:
+    return {
+        "TargetUserName": fields.get("TargetUserName", user.username if user else "-"),
+        "TargetDomainName": fields.get("TargetDomainName", user.domain if user else "-"),
+        "TargetSid": _sid(host, user),
+        "ServiceName": fields.get("ServiceName", "krbtgt"),
+        "ServiceSid": fields.get("ServiceSid", "S-1-5-21-xxx-502"),
+        "TicketOptions": fields.get("TicketOptions", "0x40810010"),
+        "Status": fields.get("Status", "0x0"),
+        "TicketEncryptionType": fields.get("TicketEncryptionType", "0x12"),
+        "PreAuthType": fields.get("PreAuthType", "15"),
+        "IpAddress": fields.get("IpAddress", f"::{host.ip}"),
+        "IpPort": fields.get("IpPort", str(random.randint(49152, 65535))),
+        "CertIssuerName": "-",
+        "CertSerialNumber": "-",
+        "CertThumbprint": "-",
+    }
+
+
+# ── EID 4769 — Kerberos Service Ticket Requested ─────────────────────────────
+
+def eid_4769(fields: dict, host: Host, user: User | None, **_) -> dict:
+    return {
+        "TargetUserName": fields.get("TargetUserName",
+            f"{user.username}@{user.domain}" if user else "-"),
+        "TargetDomainName": fields.get("TargetDomainName", user.domain if user else "-"),
+        "ServiceName": fields.get("ServiceName", "cifs/WIN-FS1"),
+        "ServiceSid": fields.get("ServiceSid", "S-1-5-21-xxx-1103"),
+        "TicketOptions": fields.get("TicketOptions", "0x40810000"),
+        "TicketEncryptionType": fields.get("TicketEncryptionType", "0x12"),
+        "IpAddress": fields.get("IpAddress", f"::{host.ip}"),
+        "IpPort": fields.get("IpPort", str(random.randint(49152, 65535))),
+        "Status": fields.get("Status", "0x0"),
+        "LogonGuid": _new_logon_guid(),
+        "TransmittedServices": "-",
+    }
+
+
+# ── EID 4771 — Kerberos Pre-Authentication Failed ────────────────────────────
+
+def eid_4771(fields: dict, host: Host, user: User | None, **_) -> dict:
+    return {
+        "TargetUserName": fields.get("TargetUserName", user.username if user else "-"),
+        "TargetSid": _sid(host, user),
+        "ServiceName": fields.get("ServiceName", "krbtgt/LAB"),
+        "TicketOptions": fields.get("TicketOptions", "0x40810010"),
+        "Status": fields.get("Status", "0x18"),
+        "PreAuthType": fields.get("PreAuthType", "2"),
+        "IpAddress": fields.get("IpAddress", f"::{host.ip}"),
+        "IpPort": fields.get("IpPort", str(random.randint(49152, 65535))),
+        "CertIssuerName": "-",
+        "CertSerialNumber": "-",
+        "CertThumbprint": "-",
+    }
+
+
+# ── EID 4723 — Password Change Attempted ─────────────────────────────────────
+
+def eid_4723(fields: dict, host: Host, user: User | None, **_) -> dict:
+    return {
+        "SubjectUserSid": _sid(host, user),
+        "SubjectUserName": fields.get("SubjectUserName", user.username if user else "-"),
+        "SubjectDomainName": fields.get("SubjectDomainName", user.domain if user else "-"),
+        "SubjectLogonId": _logon_id(),
+        "TargetUserName": fields.get("TargetUserName", user.username if user else "-"),
+        "TargetDomainName": fields.get("TargetDomainName", user.domain if user else "-"),
+        "TargetSid": _sid(host, user),
+    }
+
+
+# ── EID 4724 — Password Reset ─────────────────────────────────────────────────
+
+def eid_4724(fields: dict, host: Host, user: User | None, **_) -> dict:
+    return {
+        "SubjectUserSid": _sid(host, user),
+        "SubjectUserName": fields.get("SubjectUserName", user.username if user else "SYSTEM"),
+        "SubjectDomainName": fields.get("SubjectDomainName", user.domain if user else "NT AUTHORITY"),
+        "SubjectLogonId": _logon_id(),
+        "TargetUserName": fields.get("TargetUserName", "svc_backup_admin"),
+        "TargetDomainName": fields.get("TargetDomainName", host.name),
+        "TargetSid": fields.get("TargetSid", f"{host.sid_prefix}-1100"),
+    }
+
+
+# ── EID 4725 — User Account Disabled ─────────────────────────────────────────
+
+def eid_4725(fields: dict, host: Host, user: User | None, **_) -> dict:
+    return {
+        "SubjectUserSid": _sid(host, user),
+        "SubjectUserName": fields.get("SubjectUserName", user.username if user else "SYSTEM"),
+        "SubjectDomainName": fields.get("SubjectDomainName", user.domain if user else "NT AUTHORITY"),
+        "SubjectLogonId": _logon_id(),
+        "TargetUserName": fields.get("TargetUserName", "victim.user"),
+        "TargetDomainName": fields.get("TargetDomainName", host.name),
+        "TargetSid": fields.get("TargetSid", f"{host.sid_prefix}-1101"),
+    }
+
+
+# ── EID 4726 — User Account Deleted ──────────────────────────────────────────
+
+def eid_4726(fields: dict, host: Host, user: User | None, **_) -> dict:
+    return {
+        "SubjectUserSid": _sid(host, user),
+        "SubjectUserName": fields.get("SubjectUserName", user.username if user else "SYSTEM"),
+        "SubjectDomainName": fields.get("SubjectDomainName", user.domain if user else "NT AUTHORITY"),
+        "SubjectLogonId": _logon_id(),
+        "TargetUserName": fields.get("TargetUserName", "victim.user"),
+        "TargetDomainName": fields.get("TargetDomainName", host.name),
+        "TargetSid": fields.get("TargetSid", f"{host.sid_prefix}-1101"),
+        "PrivilegeList": "-",
+        "SamAccountName": fields.get("TargetUserName", "victim.user"),
+        "DisplayName": "%%1793",
+        "UserPrincipalName": "-",
+        "HomeDirectory": "%%1793",
+        "HomePath": "%%1793",
+        "ScriptPath": "%%1793",
+        "ProfilePath": "%%1793",
+        "UserWorkstations": "%%1793",
+        "PasswordLastSet": "%%1794",
+        "AccountExpires": "%%1794",
+        "PrimaryGroupId": "513",
+        "AllowedToDelegateTo": "-",
+        "OldUacValue": "0x15",
+        "NewUacValue": "0x11",
+        "UserAccountControl": "%%2080",
+        "UserParameters": "%%1793",
+        "SidHistory": "-",
+        "LogonHours": "%%1797",
+    }
+
+
+# ── EID 4656 — Handle to Object Requested ────────────────────────────────────
+
+def eid_4656(fields: dict, host: Host, user: User | None, **_) -> dict:
+    return {
+        "SubjectUserSid": _sid(host, user),
+        "SubjectUserName": fields.get("SubjectUserName", user.username if user else "-"),
+        "SubjectDomainName": fields.get("SubjectDomainName", user.domain if user else "-"),
+        "SubjectLogonId": _logon_id(),
+        "ObjectServer": fields.get("ObjectServer", "Security"),
+        "ObjectType": fields.get("ObjectType", "File"),
+        "ObjectName": fields.get("ObjectName", r"C:\Windows\System32\lsass.exe"),
+        "HandleId": _hex(),
+        "TransactionId": _null_guid(),
+        "AccessList": fields.get("AccessList", "%%4416"),
+        "AccessReason": fields.get("AccessReason", "%%4416: %%1801"),
+        "AccessMask": fields.get("AccessMask", "0x1"),
+        "PrivilegeList": "-",
+        "RestrictedSidCount": "0",
+        "ProcessId": _pid(),
+        "ProcessName": fields.get("ProcessName", r"C:\Windows\System32\cmd.exe"),
+        "ResourceAttributes": "-",
+    }
+
+
+# ── EID 4663 — Object Access ──────────────────────────────────────────────────
+
+def eid_4663(fields: dict, host: Host, user: User | None, **_) -> dict:
+    return {
+        "SubjectUserSid": _sid(host, user),
+        "SubjectUserName": fields.get("SubjectUserName", user.username if user else "-"),
+        "SubjectDomainName": fields.get("SubjectDomainName", user.domain if user else "-"),
+        "SubjectLogonId": _logon_id(),
+        "ObjectServer": fields.get("ObjectServer", "Security"),
+        "ObjectType": fields.get("ObjectType", "File"),
+        "ObjectName": fields.get("ObjectName", r"C:\Windows\System32\lsass.DMP"),
+        "HandleId": _hex(),
+        "AccessList": fields.get("AccessList", "%%4417"),
+        "AccessMask": fields.get("AccessMask", "0x2"),
+        "ProcessId": _pid(),
+        "ProcessName": fields.get("ProcessName", r"C:\Windows\System32\cmd.exe"),
+        "ResourceAttributes": "-",
+        "TransactionId": _null_guid(),
+    }
+
+
+# ── EID 4657 — Registry Value Modified ───────────────────────────────────────
+
+def eid_4657(fields: dict, host: Host, user: User | None, **_) -> dict:
+    return {
+        "SubjectUserSid": _sid(host, user),
+        "SubjectUserName": fields.get("SubjectUserName", user.username if user else "-"),
+        "SubjectDomainName": fields.get("SubjectDomainName", user.domain if user else "-"),
+        "SubjectLogonId": _logon_id(),
+        "ObjectName": fields.get("ObjectName",
+            r"\REGISTRY\MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Run"),
+        "ObjectValueName": fields.get("ObjectValueName", "Updater"),
+        "HandleId": _hex(),
+        "OperationType": fields.get("OperationType", "%%1904"),
+        "OldValueType": fields.get("OldValueType", "%%1873"),
+        "OldValue": fields.get("OldValue", "-"),
+        "NewValueType": fields.get("NewValueType", "%%1873"),
+        "NewValue": fields.get("NewValue", r"C:\ProgramData\update.exe"),
+        "ProcessId": _pid(),
+        "ProcessName": fields.get("ProcessName", r"C:\Windows\System32\reg.exe"),
+    }
+
+
+# ── EID 4670 — Permissions on Object Changed ─────────────────────────────────
+
+def eid_4670(fields: dict, host: Host, user: User | None, **_) -> dict:
+    return {
+        "SubjectUserSid": _sid(host, user),
+        "SubjectUserName": fields.get("SubjectUserName", user.username if user else "-"),
+        "SubjectDomainName": fields.get("SubjectDomainName", user.domain if user else "-"),
+        "SubjectLogonId": _logon_id(),
+        "ObjectServer": fields.get("ObjectServer", "Security"),
+        "ObjectType": fields.get("ObjectType", "File"),
+        "ObjectName": fields.get("ObjectName", r"C:\ProgramData\update.exe"),
+        "HandleId": _hex(),
+        "OldSd": fields.get("OldSd", "D:PAI(A;;FA;;;BA)"),
+        "NewSd": fields.get("NewSd", "D:PAI(A;;FA;;;BA)(A;;FA;;;WD)"),
+        "ProcessId": _pid(),
+        "ProcessName": fields.get("ProcessName", r"C:\Windows\System32\icacls.exe"),
+    }
+
+
+# ── EID 5156 — WFP Connection Allowed ────────────────────────────────────────
+
+def eid_5156(fields: dict, host: Host, **_) -> dict:
+    return {
+        "ProcessID": _pid(),
+        "Application": fields.get("Application",
+            r"\device\harddiskvolume3\windows\system32\svchost.exe"),
+        "Direction": fields.get("Direction", "%%14593"),
+        "SourceAddress": fields.get("SourceAddress", host.ip),
+        "SourcePort": str(fields.get("SourcePort", random.randint(49152, 65535))),
+        "DestAddress": fields.get("DestAddress", "8.8.8.8"),
+        "DestPort": str(fields.get("DestPort", "443")),
+        "Protocol": str(fields.get("Protocol", "6")),
+        "FilterRTID": str(random.randint(60000, 99999)),
+        "LayerName": "%%14610",
+        "LayerRTID": "48",
+        "RemoteUserID": "S-1-0-0",
+        "RemoteMachineID": "S-1-0-0",
+    }
+
+
+# ── EID 5157 — WFP Connection Blocked ────────────────────────────────────────
+
+def eid_5157(fields: dict, host: Host, **_) -> dict:
+    return {
+        "ProcessID": _pid(),
+        "Application": fields.get("Application",
+            r"\device\harddiskvolume3\programdata\microsoft\windows\update.exe"),
+        "Direction": fields.get("Direction", "%%14593"),
+        "SourceAddress": fields.get("SourceAddress", host.ip),
+        "SourcePort": str(fields.get("SourcePort", random.randint(49152, 65535))),
+        "DestAddress": fields.get("DestAddress", "198.41.192.227"),
+        "DestPort": str(fields.get("DestPort", "443")),
+        "Protocol": str(fields.get("Protocol", "6")),
+        "FilterRTID": str(random.randint(60000, 99999)),
+        "LayerName": "%%14610",
+        "LayerRTID": "48",
+        "RemoteUserID": "S-1-0-0",
+        "RemoteMachineID": "S-1-0-0",
+    }
+
+
+# ── EID 4946 — Firewall Rule Added ───────────────────────────────────────────
+
+def eid_4946(fields: dict, **_) -> dict:
+    return {
+        "ProfileChanged": fields.get("ProfileChanged", "All"),
+        "AddedNewRule": fields.get("AddedNewRule", ""),
+        "RuleId": fields.get("RuleId", _new_logon_guid()),
+        "RuleName": fields.get("RuleName", "Allow Outbound Update"),
+        "Origin": fields.get("Origin", "Local"),
+        "ApplicationPath": fields.get("ApplicationPath",
+            r"C:\ProgramData\Microsoft\Windows\update.exe"),
+        "ServiceName": fields.get("ServiceName", ""),
+        "Direction": fields.get("Direction", "Outbound"),
+        "Protocol": fields.get("Protocol", "TCP"),
+        "LocalPorts": fields.get("LocalPorts", "Any"),
+        "RemotePorts": fields.get("RemotePorts", "443"),
+        "LocalAddresses": fields.get("LocalAddresses", "Any"),
+        "RemoteAddresses": fields.get("RemoteAddresses", "Any"),
+        "RemoteMachineAuthorizationList": "",
+        "RemoteUserAuthorizationList": "",
+        "EmbeddedContext": "",
+        "Active": "Yes",
+        "Action": fields.get("Action", "Allow"),
+        "EdgeTraversal": fields.get("EdgeTraversal", "No"),
+        "LooseSourceMapped": "No",
+        "SecurityOptions": "None",
+        "ModifyingApplication": fields.get("ModifyingApplication",
+            r"C:\Windows\System32\netsh.exe"),
+    }
+
+
+# ── EID 4947 — Firewall Rule Modified ────────────────────────────────────────
+
+def eid_4947(fields: dict, **_) -> dict:
+    return {
+        "ProfileChanged": fields.get("ProfileChanged", "All"),
+        "RuleId": fields.get("RuleId", _new_logon_guid()),
+        "RuleName": fields.get("RuleName", "Allow Outbound Update"),
+        "Origin": fields.get("Origin", "Local"),
+        "ApplicationPath": fields.get("ApplicationPath",
+            r"C:\ProgramData\Microsoft\Windows\update.exe"),
+        "ServiceName": fields.get("ServiceName", ""),
+        "ModifyingApplication": fields.get("ModifyingApplication",
+            r"C:\Windows\System32\netsh.exe"),
+    }
+
+
 # ── EID 4672 — Special Privileges Assigned to New Logon ──────────────────────
 
 def eid_4672(fields: dict, host: Host, user: User | None, **_) -> dict:
@@ -281,16 +589,39 @@ def eid_4672(fields: dict, host: Host, user: User | None, **_) -> dict:
 # ── Dispatcher ────────────────────────────────────────────────────────────────
 
 _GENERATORS = {
+    # Authentication / Logon
     4624: eid_4624,
     4625: eid_4625,
     4634: eid_4634,
     4648: eid_4648,
-    4688: eid_4688,
-    4698: eid_4698,
-    4720: eid_4720,
-    4732: eid_4732,
     4672: eid_4672,
     4776: eid_4776,
+    # Kerberos
+    4768: eid_4768,
+    4769: eid_4769,
+    4771: eid_4771,
+    # Process
+    4688: eid_4688,
+    # Scheduled Tasks
+    4698: eid_4698,
+    # Account management
+    4720: eid_4720,
+    4723: eid_4723,
+    4724: eid_4724,
+    4725: eid_4725,
+    4726: eid_4726,
+    4732: eid_4732,
+    # Object access / handles
+    4656: eid_4656,
+    4663: eid_4663,
+    4657: eid_4657,
+    4670: eid_4670,
+    # Windows Filtering Platform
+    5156: eid_5156,
+    5157: eid_5157,
+    # Firewall
+    4946: eid_4946,
+    4947: eid_4947,
 }
 
 

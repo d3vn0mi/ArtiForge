@@ -8,7 +8,7 @@ Items within each milestone are roughly ordered by priority.
 
 ---
 
-## v0.1 — Foundation ✓ (current)
+## v0.1 — Foundation ✓
 
 - [x] YAML-driven lab specification with Pydantic v2 validation
 - [x] Security channel: 4624, 4625, 4634, 4648, 4672, 4688, 4698, 4720, 4732, 4776
@@ -28,41 +28,40 @@ Items within each milestone are roughly ordered by priority.
 
 ---
 
-## v0.2 — Event Coverage Expansion
+## v0.2 — Event Coverage Expansion ✓ (current)
 
 The core generator layer needs a wider net before more scenarios can be built.
 
 ### Authentication & Account Events (Security)
-- [ ] **4625** — Failed logon (wrong password, locked account, disabled account)
-- [ ] **4768** — Kerberos TGT requested (AS-REQ)
-- [ ] **4769** — Kerberos service ticket requested (TGS-REQ)
-- [ ] **4771** — Kerberos pre-authentication failed (bad password at DC)
-- [ ] **4723/4724** — Password change / password reset by admin
-- [ ] **4725/4726** — Account disabled / account deleted
+- [x] **4768** — Kerberos TGT requested (AS-REQ)
+- [x] **4769** — Kerberos service ticket requested (TGS-REQ)
+- [x] **4771** — Kerberos pre-authentication failed (bad password at DC)
+- [x] **4723/4724** — Password change / password reset by admin
+- [x] **4725/4726** — Account disabled / account deleted
 
 ### Object & Registry Access (Security)
-- [ ] **4656** — A handle to an object was requested
-- [ ] **4663** — An attempt was made to access an object (file read/write/delete)
-- [ ] **4657** — A registry value was modified
-- [ ] **4670** — Permissions on an object were changed
+- [x] **4656** — A handle to an object was requested
+- [x] **4663** — An attempt was made to access an object (file read/write/delete)
+- [x] **4657** — A registry value was modified
+- [x] **4670** — Permissions on an object were changed
 
 ### Network Policy & Firewall (Security / System)
-- [ ] **5156** — Windows Filtering Platform connection allowed
-- [ ] **5157** — Windows Filtering Platform connection blocked
-- [ ] **4946/4947** — Windows Firewall rule added / modified
+- [x] **5156** — Windows Filtering Platform connection allowed
+- [x] **5157** — Windows Filtering Platform connection blocked
+- [x] **4946/4947** — Windows Firewall rule added / modified
 
 ### Sysmon
-- [ ] **5** — Process terminated (pairs with EID 1 for full lifecycle)
-- [ ] **7** — Image loaded (DLL side-loading / reflective injection detection)
-- [ ] **8** — CreateRemoteThread (process injection)
-- [ ] **10** — ProcessAccess (credential dumping via LSASS access)
-- [ ] **12/14** — RegistryEvent: key/value create+delete / key renamed
-- [ ] **17/18** — PipeEvent: pipe created / pipe connected (lateral movement)
-- [ ] **23** — FileDelete (evidence tampering)
-- [ ] **25** — ProcessTampering (process hollowing/herpaderping)
+- [x] **5** — Process terminated (pairs with EID 1 for full lifecycle)
+- [x] **7** — Image loaded (DLL side-loading / reflective injection detection)
+- [x] **8** — CreateRemoteThread (process injection)
+- [x] **10** — ProcessAccess (credential dumping via LSASS access)
+- [x] **12/14** — RegistryEvent: key/value create+delete / key renamed
+- [x] **17/18** — PipeEvent: pipe created / pipe connected (lateral movement)
+- [x] **23** — FileDelete (evidence tampering)
+- [x] **25** — ProcessTampering (process hollowing/herpaderping)
 
 ### WMI Events (Microsoft-Windows-WMI-Activity/Operational)
-- [ ] **5857/5860/5861** — WMI activity: provider loaded, subscription created, filter/consumer bound
+- [x] **5857/5860/5861** — WMI activity: provider loaded, subscription created, filter/consumer bound
 
 ---
 
