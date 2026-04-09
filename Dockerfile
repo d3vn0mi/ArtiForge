@@ -17,5 +17,8 @@ RUN pip install --no-cache-dir .
 # Artifacts default to ./artifacts which resolves to /work/artifacts on the host.
 WORKDIR /work
 
+# Web UI port — used by: docker run -p 5000:5000 artiforge serve --host 0.0.0.0
+EXPOSE 5000
+
 ENTRYPOINT ["artiforge"]
 CMD ["--help"]
