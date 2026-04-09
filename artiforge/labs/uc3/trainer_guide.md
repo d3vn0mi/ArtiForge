@@ -442,55 +442,126 @@ The `winlog.event_data.Message` (or `message`) field contains the cloudflared er
 
 ## Hunt Task 5 — Lateral Movement and File Staging
 
-### Objective
-Trace the attacker's lateral movement from WIN-WS1 to the destination host, identify the
-credentials used, and determine what was collected and staged.
-
-### Expected Findings
+### Evidence Reference
 
 | Time (UTC) | EID | Host | Detail |
 |------------|-----|------|--------|
-| 11:12:00 | Sysmon 3 | WIN-WS1 | `mstsc.exe` → 10.10.10.11:3389/TCP |
-| 11:12:01 | 4648 | WIN-WS1 | Explicit creds: `svc_backup_admin` / `WIN-WS2`, via `mstsc.exe` |
-| 11:12:05 | **4624** | WIN-WS2 | RDP logon Type 10, `svc_backup_admin`, from IP 10.10.10.10 |
-| 11:12:06 | 4672 | WIN-WS2 | Special privileges assigned (local admin session) |
-| 11:14:00 | 4688 + Sysmon 1 | WIN-WS2 | `powershell.exe -NoP -EP Bypass Compress-Archive ...docs_2026.zip` |
-| 11:14:15 | Sysmon 11 | WIN-WS2 | `docs_2026.zip` created in svc_backup_admin's %TEMP% |
+| 11:12:00 | Sysmon 3 | WIN-WS1 | `mstsc.exe` → 10.10.10.11:**3389**/TCP |
+| 11:12:01 | 4648 | WIN-WS1 | Explicit creds: `svc_backup_admin` / `WIN-WS2` via `mstsc.exe` |
+| 11:12:05 | 4624 | WIN-WS2 | Logon Type 10 (RDP), `svc_backup_admin`, source IP 10.10.10.10 |
+| 11:12:06 | 4672 | WIN-WS2 | Special privileges assigned to new logon session |
+| 11:14:00 | 4688 + Sysmon 1 | WIN-WS2 | `powershell.exe -NoP -EP Bypass Compress-Archive … docs_2026.zip` |
+| 11:14:15 | Sysmon 11 | WIN-WS2 | `docs_2026.zip` created in `svc_backup_admin`'s `%TEMP%` |
 | 11:17:00 | 4634 | WIN-WS2 | RDP session logoff |
 
-**Key findings:**
-- Source: WIN-WS1, Destination: WIN-WS2 (10.10.10.11)
-- Credential: `svc_backup_admin` — the account created in Phase 3 via the Veeam pivot
-- Authentication: RDP (LogonType 10), Negotiate package — pass-the-hash or plaintext
-- Staged file: `C:\Users\svc_backup_admin\AppData\Local\Temp\docs_2026.zip`
-  containing contents of `C:\Users\svc_backup_admin\Documents\SensitiveDocs\`
-- `-EP Bypass` flag disables PowerShell execution policy (a soft control)
+**MITRE:** T1021.001, T1550.002, T1560.001
 
-### Tiered Hints
-**Hint 1:** Look for Security EID `4624` with `LogonType: 10` on any host other than
-WIN-WS1. Which host received an RDP logon, and what user account was used?
+---
 
-**Hint 2:** Before the 4624, look for a 4648 (Explicit Credentials Logon) on WIN-WS1.
-What `TargetUserName` and `ProcessName` does it show? Now connect this credential to
-what you found in Hunt Task 3.
+### Q1. Which host did the attacker move to, and how (what protocol / method)? What was the source IP?
 
-**Hint 3:** The credential `svc_backup_admin` was created in Phase 3 on WIN-BACKUP1 and
-reused here for RDP to WIN-WS2 (T1550.002 — pass-the-hash/credential reuse across hosts).
-For collection: search Sysmon EID 11 on WIN-WS2 for file creation events. The `docs_2026.zip`
-in %TEMP% is the staged archive ready for exfiltration.
+**Answer:** The attacker moved to **WIN-WS2 (10.10.10.11)** using **RDP (Remote Desktop Protocol)** on **TCP port 3389**. The source IP was **10.10.10.10** (WIN-WS1). The movement was confirmed by two events firing in sequence: a Sysmon EID 3 network connection from `mstsc.exe` on WIN-WS1, followed one second later by a Security EID 4624 (Logon Type 10 = RemoteInteractive) on WIN-WS2.
 
-### Debrief Talking Points
-- The credential `svc_backup_admin` traces back to the Veeam pivot (Phase 3) — this is
-  the full attack chain: phishing → LOLBAS → persistence → credential theft → C2 (failed)
-  → lateral movement → data staging
-- LogonType 10 (RemoteInteractive) is always RDP — combined with the source IP it gives
-  clear provenance
-- 4672 immediately after 4624 confirms `svc_backup_admin` has local admin rights on WIN-WS2
-  (SeDebugPrivilege, SeBackupPrivilege, etc.)
-- `powershell.exe -EP Bypass` is high-signal; combined with `Compress-Archive` and a
-  destination path in %TEMP% it is a strong data-staging indicator
-- Sysmon EID 11 shows the ZIP being created, but no exfiltration is recorded — trainees
-  should note the file exists and discuss what exfil vector might follow
+**How to find it — source side (WIN-WS1):**
+```kql
+winlog.event_id: 3 and winlog.event_data.Image: *mstsc.exe* and host.name: "WIN-WS1"
+```
+The `destination.ip` (10.10.10.11), `destination.port` (3389), and `@timestamp` confirm the outbound RDP initiation.
+
+**How to find it — target side (WIN-WS2):**
+```kql
+winlog.event_id: 4624 and winlog.event_data.LogonType: 10
+```
+The `winlog.event_data.IpAddress` field shows the source IP (10.10.10.10). `LogonType: 10` is always RemoteInteractive — the Windows designation for RDP.
+
+**Hint 1:** Search for EID 4624 with `LogonType: 10` across all hosts. Which host received it, what time, and what was the source IP?
+
+**Hint 2:** Cross-reference with Sysmon EID 3 on WIN-WS1 at the same timestamp — look for `mstsc.exe` connecting to port 3389. The two events together confirm both ends of the connection.
+
+**Trainer notes:** Teaching trainees to look at both ends of a lateral movement event is a key skill. The 4624 on WIN-WS2 tells you the destination and the credential. The Sysmon EID 3 on WIN-WS1 tells you the source process and the exact connection time. Together they provide irrefutable provenance. `LogonType 10` (RemoteInteractive) is exclusively RDP — unlike Type 3 (Network) which can be SMB, WMI, or other remote access. Trainees should memorise the key logon types: 2=interactive, 3=network, 10=RDP, 4/5=service/batch, 7=unlock, 9=new credentials (runas).
+
+---
+
+### Q2. What credential was used to authenticate? Where have you seen this credential before in this investigation?
+
+**Answer:** The credential used was **`svc_backup_admin`**. This is the same account that was created on WIN-BACKUP1 in Task 3 (EID 4720 at 10:15:00 UTC), where it was added to the Administrators group 5 seconds later (EID 4732). The attacker harvested this credential via the Veeam CVE-2023-27532 exploitation, created the account on WIN-BACKUP1, and then reused it here for RDP access to WIN-WS2 — crossing three hosts with a single credential.
+
+**How to find it:**
+```kql
+winlog.event_id: 4648 and host.name: "WIN-WS1"
+```
+The EID 4648 (Explicit Credentials Logon) event on WIN-WS1 at 11:12:01 UTC shows `winlog.event_data.TargetUserName` = `svc_backup_admin`, `winlog.event_data.TargetServerName` = `WIN-WS2`, and `winlog.event_data.ProcessName` = `mstsc.exe`. Cross-reference this username against the EID 4720 event found in Task 3 on WIN-BACKUP1.
+
+**Hint 1:** Before the 4624 on WIN-WS2, look for a 4648 on WIN-WS1. What `TargetUserName` is shown? What `ProcessName` was used to supply those credentials?
+
+**Hint 2:** Search your notes or Kibana for that username across all hosts and all tasks. Where did you first see it created?
+
+**Trainer notes:** The credential re-use across WIN-BACKUP1 → WIN-WS2 is the central thread connecting Task 3 and Task 5. If trainees have not tracked accounts across tasks, this is the moment to demonstrate why longitudinal tracking matters. The fact that `svc_backup_admin` was a newly created account (Task 3) that then appears immediately in lateral movement (Task 5) is a high-signal pattern: newly created service accounts that authenticate via RDP within the same incident timeframe are almost always attacker-controlled. The EID 4648 on WIN-WS1 is also significant — it records that `mstsc.exe` was supplied explicit credentials, meaning the attacker had the password or hash in memory and passed it directly, consistent with T1550.002 (credential reuse / pass-the-hash).
+
+---
+
+### Q3. What did the attacker do after gaining access to the new host? Identify the command run and any resulting file artefacts.
+
+**Answer:** At 11:14:00 UTC, the attacker ran the following PowerShell command on WIN-WS2:
+```
+powershell.exe -NoP -EP Bypass -Command Compress-Archive -Path C:\Users\svc_backup_admin\Documents\SensitiveDocs\* -DestinationPath C:\Users\svc_backup_admin\AppData\Local\Temp\docs_2026.zip
+```
+This created the file **`docs_2026.zip`** in the user's `%TEMP%` directory at 11:14:15 UTC (Sysmon EID 11), containing the contents of the `SensitiveDocs` folder. The attacker's RDP session ended at 11:17:00 UTC (EID 4634).
+
+**How to find it — command:**
+```kql
+winlog.event_id: (4688 or 1) and host.name: "WIN-WS2"
+```
+Sort ascending. The `process.command_line` field (Sysmon EID 1) or `winlog.event_data.CommandLine` (EID 4688) shows the full PowerShell invocation with all flags and arguments.
+
+**How to find it — file artefact:**
+```kql
+winlog.event_id: 11 and host.name: "WIN-WS2"
+```
+The `winlog.event_data.TargetFilename` field shows `docs_2026.zip` in the `svc_backup_admin` temp directory.
+
+**Hint 1:** Check EID 4688 or Sysmon EID 1 on WIN-WS2 after 11:12. What process was launched and what is the full command line?
+
+**Hint 2:** After finding the PowerShell command, check Sysmon EID 11 on WIN-WS2. What file was created, and where?
+
+**Trainer notes:** The PowerShell flags are all individually meaningful and worth calling out to trainees: `-NoP` (NoProfile) prevents loading the user's profile, which avoids logging to `PSReadLine` history; `-EP Bypass` disables the execution policy (a soft, easily bypassed control); `Compress-Archive` is a native PowerShell cmdlet, so no additional binaries are needed. The destination path in `%TEMP%` is a staging pattern — the file is placed somewhere writable and temporary, ready for a subsequent exfiltration step. The source path `SensitiveDocs` is the collection target, explicitly named by the attacker. The combination of `-EP Bypass`, `Compress-Archive`, a `Documents` source, and a `%TEMP%` destination is a high-confidence data staging indicator that should be a detection rule in any mature SOC.
+
+---
+
+### Q4. Was any data successfully exfiltrated? What evidence supports your conclusion?
+
+**Answer:** **Based on the available logs, no exfiltration was observed.** The evidence for this conclusion:
+- Sysmon EID 11 confirms `docs_2026.zip` was **created** on WIN-WS2 at 11:14:15 UTC.
+- There are **no Sysmon EID 3 events** from WIN-WS2 after the ZIP was created, meaning no outbound network connections were initiated from WIN-WS2 during the session.
+- The RDP session ended (EID 4634) at 11:17:00 UTC — 3 minutes after the archive was created.
+
+The data was **staged but not yet exfiltrated** within the observed log window. The investigation is not closed: the ZIP file remains on disk and could be exfiltrated in a subsequent session not captured in these logs.
+
+**How to find it:**
+```kql
+winlog.event_id: 3 and host.name: "WIN-WS2"
+```
+Check for any Sysmon EID 3 events on WIN-WS2 after 11:14:15 (the ZIP creation time) and before 11:17:00 (the logoff). The absence of results confirms no outbound connections were made. Also check:
+```kql
+winlog.event_id: 4634 and host.name: "WIN-WS2"
+```
+to confirm the session end timestamp.
+
+**Hint 1:** After the ZIP is created (Sysmon EID 11 at 11:14:15), search for Sysmon EID 3 on WIN-WS2. Are there any outbound network connections from WIN-WS2?
+
+**Hint 2:** Check EID 4634 on WIN-WS2 — when did the session end? Is there any time between ZIP creation and session end where exfiltration could have occurred without a Sysmon 3 event?
+
+**Trainer notes:** This question is intentionally designed to test critical thinking about absence of evidence. Trainees who simply say "no exfiltration happened" without citing the absence of Sysmon EID 3 events are drawing a conclusion without evidence. Trainees who say "exfiltration may have occurred but is not visible in these logs" are thinking correctly about log coverage gaps. The right answer is the middle ground: within the observed log window and on this host, no network transfer was recorded — but the ZIP remains on disk and the investigation is ongoing. This is an opportunity to discuss: what would the next investigative step be? (Answer: check network flow logs at the perimeter, look for subsequent sessions to WIN-WS2, search for the ZIP file in file system forensics, check for RDP clipboard-based transfers which may not generate Sysmon 3 events.)
+
+---
+
+### Debrief
+
+- The full attack chain connects all 5 tasks: phishing `.lnk` → LOLBAS execution → scheduled task persistence → Veeam credential theft → C2 attempt (failed) → credential reuse for RDP → data staging. Every phase leaves a distinct set of event IDs.
+- `LogonType 10` is exclusively RDP. Combined with a source IP and a known-malicious credential, it provides unambiguous lateral movement evidence.
+- EID 4672 immediately following a 4624 confirms the logged-on account has elevated privileges — always check this pair together.
+- `-EP Bypass` + `Compress-Archive` + `%TEMP%` destination is a high-confidence data staging pattern that should be a SIEM detection rule.
+- The absence of Sysmon EID 3 after file creation means no observed exfiltration — but staged data on disk is an open threat until confirmed removed or the host is reimaged.
 
 ---
 
