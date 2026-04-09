@@ -79,98 +79,173 @@ visible traces.
 
 ## Hunt Task 1 — Initial Execution: LOLBAS Chain
 
-### Objective
-Identify the full execution chain that began execution on WIN-WS1, starting from the
-user's interactive session, and trace every parent-child process relationship.
-
-### Expected Findings
-Trainees should identify:
+### Evidence Reference
 
 | Time (UTC) | EID | Host | Detail |
 |------------|-----|------|--------|
 | 09:12:00 | 4624 | WIN-WS1 | marcus.webb interactive logon (Type 2) |
-| 09:12:02 | Sysmon 11 | WIN-WS1 | `ie4uinit_setup.inf` dropped to %TEMP% |
-| 09:12:03 | Sysmon 11 | WIN-WS1 | `style.xsl` dropped to C:\ProgramData\MicrosoftEdgeUpdate\ |
+| 09:12:02 | Sysmon 11 | WIN-WS1 | `ie4uinit_setup.inf` dropped to `%TEMP%` |
+| 09:12:03 | Sysmon 11 | WIN-WS1 | `style.xsl` dropped to `C:\ProgramData\MicrosoftEdgeUpdate\` |
 | 09:12:05 | 4688 + Sysmon 1 | WIN-WS1 | `ie4uinit.exe -BaseSettings` spawned by `explorer.exe` |
 | 09:12:08 | 4688 + Sysmon 1 | WIN-WS1 | `msxsl.exe style.xsl data.xml` spawned by `ie4uinit.exe` |
 | 09:12:10 | 4688 + Sysmon 1 | WIN-WS1 | `cmd.exe /c whoami && net user` spawned by `msxsl.exe` |
 
-**Root cause:** A `.lnk` shortcut on marcus.webb's desktop targeting `ie4uinit.exe -BaseSettings`.
-The INF file directs ie4uinit to execute msxsl, which transforms the XSL stylesheet to run cmd.
+**MITRE:** T1566.001, T1204.002, T1218, T1218.010
 
-**Key anomalies to highlight:**
-- `explorer.exe` spawning `ie4uinit.exe` with `-BaseSettings` is unusual (legitimate
-  ie4uinit runs are rare on modern Windows)
-- `ie4uinit.exe` spawning `msxsl.exe` is **never** legitimate
-- `msxsl.exe` processing files from `C:\ProgramData\` is a strong IOC
-- `cmd.exe` command line contains `whoami && net user` — classic post-exploitation recon
+---
 
-### Tiered Hints
-**Hint 1 (gentle):** Filter Kibana to `host.name: WIN-WS1` and look at Security EID 4688
-events between 09:11 and 09:13. Sort by `@timestamp` ascending. What unusual process name
-do you see as `NewProcessName`?
+### Q1. What process first executed as a result of the file being opened? What was its full command line, and what spawned it?
 
-**Hint 2 (medium):** Search for `process.command_line: *ie4uinit*` — then pivot on the
-`ParentProcessName` field. Can you extend the chain from that parent forward?
+**Answer:** The first process to execute was `ie4uinit.exe`, with the full command line `ie4uinit.exe -BaseSettings`. It was spawned by `explorer.exe` at 09:12:05 UTC. The trigger was a malicious `.lnk` shortcut (`Resume_John_Smith.lnk`) on marcus.webb's desktop, which uses Windows ShellExecute to invoke its target — making `explorer.exe` the immediate parent.
 
-**Hint 3 (direct):** The chain is `explorer.exe → ie4uinit.exe → msxsl.exe → cmd.exe`.
-Look for Sysmon EID 1 events to get the full command lines with parent relationships.
-Also check Sysmon EID 11 for the dropped files that made this work.
+**How to find it:**
+```kql
+winlog.event_id: (4688 or 1) and host.name: "WIN-WS1"
+```
+Sort ascending by `@timestamp`. On EID 4688, look at `winlog.event_data.NewProcessName` and `winlog.event_data.ParentProcessName`. On Sysmon EID 1, look at `winlog.event_data.Image`, `winlog.event_data.CommandLine`, and `winlog.event_data.ParentImage`. The first unusual entry is `C:\Windows\System32\ie4uinit.exe` with parent `C:\Windows\explorer.exe`.
 
-### Debrief Talking Points
-- LOLBAS (Living Off the Land Binaries and Scripts) abuses Windows-signed binaries that
-  are already trusted by AV/EDR — no malware binary needed on disk at execution time
-- `msxsl.exe` is a retired binary rarely present on modern systems but still found in
-  enterprise environments — its parent should always be a build tool, never `ie4uinit`
-- The `.lnk` file artifact (`Resume_John_Smith.lnk`) provides the delivery vector;
-  Sysmon EID 11 shows the INF and XSL being written before execution
-- Reference: The DFIR Report covers nearly identical chains in multiple 2023-2024 cases
+**Hint 1:** Filter to `host.name: "WIN-WS1"` and EID 4688, sorted ascending, in the 09:11–09:13 window. What is the first unusual binary in `NewProcessName`?
+
+**Hint 2:** Pull the Sysmon EID 1 event at the same timestamp — it gives the full command line and the parent's full path, not just the name.
+
+**Trainer notes:** `.lnk` (shortcut) files invoke their target via `ShellExecute`, so `explorer.exe` always appears as the parent when a user double-clicks one. This is the correct and expected parent for user-initiated actions — the anomaly is not the parent but the target: `ie4uinit.exe -BaseSettings` has no legitimate use on Windows 10/11 outside of Internet Explorer setup, which no longer runs. Trainees who have never encountered LOLBAS may not immediately recognise `ie4uinit.exe` as suspicious — prompt them to ask whether they would expect a CV attachment to launch this binary.
+
+---
+
+### Q2. A chain of processes followed. List every process in the chain from first to last, including the parent-child relationships.
+
+**Answer:**
+```
+explorer.exe
+  └─ ie4uinit.exe -BaseSettings                                          [09:12:05]
+       └─ msxsl.exe C:\ProgramData\MicrosoftEdgeUpdate\style.xsl data.xml  [09:12:08]
+            └─ cmd.exe /c whoami && net user                               [09:12:10]
+```
+
+**How to find it:**
+```kql
+winlog.event_id: 1 and host.name: "WIN-WS1"
+```
+Sort ascending. For each event, use `winlog.event_data.Image` (the process) and `winlog.event_data.ParentImage` (its parent) to build the chain hop by hop. Starting from `cmd.exe`: its `ParentImage` is `msxsl.exe`; `msxsl.exe`'s `ParentImage` is `ie4uinit.exe`; `ie4uinit.exe`'s `ParentImage` is `explorer.exe`.
+
+**Hint 1:** Use Sysmon EID 1 rather than 4688 — it includes `ParentImage` as the full binary path (not just a name), which is essential for distinguishing between two processes that share a name. Filter `host.name: "WIN-WS1"` and sort ascending.
+
+**Hint 2:** If the chain is hard to see, work backwards: find `cmd.exe`, read its `ParentImage`, find that process, read its `ParentImage`, and repeat until you reach `explorer.exe`.
+
+**Trainer notes:** The `msxsl.exe` hop is where most trainees get stuck — they either do not recognise the binary or cannot figure out what it does. Explain that `msxsl.exe` (Microsoft XML Source Transformation) transforms XML documents using XSLT stylesheets. A `<msxsl:script>` block inside the stylesheet executes arbitrary code — in this case, spawning `cmd.exe`. The key training point is that `msxsl.exe` is a signed Microsoft binary: it passes hash checks, application allowlisting, and most AV heuristics. Its only legitimate parent processes are developer tools and build pipelines — never `ie4uinit.exe`.
+
+---
+
+### Q3. What files were written to disk in the minutes immediately before or during this execution? Where were they written?
+
+**Answer:** Two files were dropped to disk seconds before the execution chain started:
+- `C:\Users\marcus.webb\AppData\Local\Temp\ie4uinit_setup.inf` — written at 09:12:02 UTC
+- `C:\ProgramData\MicrosoftEdgeUpdate\style.xsl` — written at 09:12:03 UTC
+
+**How to find it:**
+```kql
+winlog.event_id: 11 and host.name: "WIN-WS1"
+```
+Set the time filter to 09:11–09:13. The key field is `winlog.event_data.TargetFilename`, which gives the full path of each created file. The `winlog.event_data.Image` field shows the process that wrote the file — both were written by `explorer.exe` as part of the `.lnk` execution.
+
+**Hint 1:** Sysmon EID 11 records every file creation. Filter to `host.name: "WIN-WS1"` in the 09:11–09:13 window. What does `TargetFilename` show for those two events?
+
+**Hint 2:** One file has a `.inf` extension. `ie4uinit.exe` reads `.inf` files to decide what to run — this is the mechanism that hands off execution to `msxsl.exe`. Without this file existing on disk first, the chain cannot start.
+
+**Trainer notes:** The staging directory `C:\ProgramData\MicrosoftEdgeUpdate\` is intentionally named to blend with the legitimate Microsoft Edge updater, which also uses a subdirectory with the same name. Without Sysmon EID 11, an analyst would only see the execution chain and might miss the pre-staged files entirely. This highlights a key training point: file write events are often the earliest observable indicator in a LOLBAS attack — the binary execution itself may look clean, but the files it reads are the real payload.
+
+---
+
+### Debrief
+
+- **LOLBAS** abuses Windows-signed binaries that AV and EDR already trust — no custom malware binary needs to touch disk at execution time. The "malware" is the `.inf` and `.xsl` files.
+- `msxsl.exe` is retired and rarely present on modern Windows; its parent should always be a developer build tool, never a shortcut launched by a user.
+- The `.lnk` delivery vector (`Resume_John_Smith.lnk`) is the initial access artefact — Sysmon EID 11 shows the INF and XSL being staged before execution, providing the full delivery chain.
+- Reference: The DFIR Report has documented nearly identical ie4uinit/msxsl chains in multiple intrusion reports from 2023–2024.
+
+
 
 ---
 
 ## Hunt Task 2 — Persistence: Scheduled Task
 
-### Objective
-Identify what persistence mechanism was installed, how it was created, and where the
-task definition is stored on disk.
-
-### Expected Findings
+### Evidence Reference
 
 | Time (UTC) | EID | Host | Detail |
 |------------|-----|------|--------|
-| 09:27:05 | Sysmon 11 | WIN-WS1 | `update.txt` written to C:\ProgramData\MicrosoftEdgeUpdate\ |
+| 09:27:05 | Sysmon 11 | WIN-WS1 | `update.txt` written to `C:\ProgramData\MicrosoftEdgeUpdate\` |
 | 09:27:08 | 4688 + Sysmon 1 | WIN-WS1 | `schtasks /Create /TN "MicrosoftEdgeUpdateTaskMachineUA" /XML ... /F` |
-| 09:27:09 | **4698** | WIN-WS1 | Scheduled task created: `\MicrosoftEdgeUpdateTaskMachineUA` |
-| 09:27:10 | Sysmon 13 | WIN-WS1 | Registry key set under TaskCache\Tasks |
+| 09:27:09 | 4698 | WIN-WS1 | Scheduled task created: `\MicrosoftEdgeUpdateTaskMachineUA` |
+| 09:27:10 | Sysmon 13 | WIN-WS1 | Registry key set under `HKLM\...\TaskCache\Tasks\` |
 
-**Key anomalies:**
-- `schtasks /Create /XML` loading a task definition from a `.txt` file — the extension
-  disguises an XML task definition
-- Task name `MicrosoftEdgeUpdateTaskMachineUA` closely mimics a legitimate Edge updater task
-- Task definition file stored in `C:\ProgramData\MicrosoftEdgeUpdate\` alongside the XSL
-  from Phase 1 — same staging directory
-- 4698 `TaskContent` field contains the full XML with trigger and action details
+**MITRE:** T1053.005
 
-### Tiered Hints
-**Hint 1:** Search for Security EID `4698` — this is the "Scheduled Task Created" event.
-What is the `TaskName` field?
+---
 
-**Hint 2:** Now search for `process.command_line: *schtasks*`. What flag in the command
-line points to how the task was defined (hint: not `/TR`)?
+### Q1. What persistence mechanism was created, and what is its name?
 
-**Hint 3:** The `/XML` flag imports a task definition from a file. Find the Sysmon EID 11
-event just before the schtasks execution to see where that file was written.
-Also check Sysmon EID 13 for the resulting registry persistence entry.
+**Answer:** A **Windows Scheduled Task** named `\MicrosoftEdgeUpdateTaskMachineUA` was created on WIN-WS1 at 09:27:09 UTC. The task is configured to run at user logon, ensuring it survives a reboot.
 
-### Debrief Talking Points
-- Security EID 4698 is the gold-standard detection for scheduled task creation — always
-  enriched with the full XML, making it trivial to analyse the trigger and action
-- Using `/XML` to import a task definition is less common than `/TR` and should be hunted
-  specifically — it allows complex trigger configurations without command-line exposure
-- The `.txt` extension on the XML file is a simple but effective obfuscation for casual
-  file inspection (e.g., `dir` output)
-- Task name mimicry is covered by T1036: defenders should baseline legitimate Edge tasks
-  (`MicrosoftEdgeUpdateTaskMachineCore`, `...UA`) and alert on near-matches
+**How to find it:**
+```kql
+winlog.event_id: 4698 and host.name: "WIN-WS1"
+```
+Expand the event. The `winlog.event_data.TaskName` field contains `\MicrosoftEdgeUpdateTaskMachineUA`. The `winlog.event_data.TaskContent` field contains the full XML definition — including the trigger (logon) and the action (binary to execute).
+
+**Hint 1:** Security EID 4698 fires every time a scheduled task is created, regardless of how it was created. Search for it on WIN-WS1. What does the `TaskName` field say?
+
+**Hint 2:** Open the `TaskContent` field of the 4698 event. What `<Actions>` element is defined, and what binary does it point to?
+
+**Trainer notes:** EID 4698 is one of the most reliable persistence detection events because it fires for every creation method — `schtasks.exe`, the Task Scheduler COM API, or even direct registry writes. The task name `MicrosoftEdgeUpdateTaskMachineUA` is deliberately chosen to mimic the real Edge updater task (`MicrosoftEdgeUpdateTaskMachineCore`). Trainees should be encouraged to look at the `TaskContent` field rather than just the task name — the full XML reveals the true trigger and action, and is immune to name obfuscation.
+
+---
+
+### Q2. How was it created? What command was run, and what is unusual about the method used?
+
+**Answer:** The task was created with the following command at 09:27:08 UTC:
+```
+schtasks /Create /TN "MicrosoftEdgeUpdateTaskMachineUA" /XML "C:\ProgramData\MicrosoftEdgeUpdate\update.txt" /F
+```
+The unusual aspect is the `/XML` flag: instead of specifying the task action inline with the more common `/TR` flag, the attacker imported the full task definition from an external file (`update.txt`). This externalises the payload from the command line, making it invisible to detections that only inspect `process.command_line` for an executable path.
+
+**How to find it:**
+```kql
+process.command_line: *schtasks* and host.name: "WIN-WS1"
+```
+On Sysmon EID 1 or EID 4688, the `process.command_line` / `winlog.event_data.CommandLine` field contains the full invocation with all flags. The `/XML` argument and the path to `update.txt` are both visible here.
+
+**Hint 1:** Search for `process.command_line: *schtasks*` on WIN-WS1. Read the full command line — what flag, other than `/TN`, stands out?
+
+**Hint 2:** The `/XML` flag points to a file. Check Sysmon EID 11 for that filename — when was it written to disk, and by what process?
+
+**Trainer notes:** Most scheduled task detection rules specifically look for `/TR` (task run) in the command line, because that is the most common method and it puts the executable path directly in the shell history. The `/XML` technique bypasses this entirely — the command line contains no executable path, only a path to a file. This is why EID 4698's `TaskContent` field is critical: it captures the full XML regardless of creation method. Point trainees to the `/F` (force) flag as well — it silently overwrites any existing task with the same name, making re-establishment of persistence frictionless.
+
+---
+
+### Q3. Where is the configuration for this mechanism stored on disk? What is unusual about the file extension?
+
+**Answer:** The task definition is stored at `C:\ProgramData\MicrosoftEdgeUpdate\update.txt`. The unusual aspect is the `.txt` extension: the file actually contains valid XML (a Windows Task Scheduler definition format), not plain text. Using `.txt` means the file appears benign on casual inspection — a `dir` listing, file manager browse, or antivirus file-type scan based on extension will not flag it as executable content.
+
+**How to find it:**
+```kql
+winlog.event_id: 11 and host.name: "WIN-WS1"
+```
+Filter the time range to 09:26–09:28. The `winlog.event_data.TargetFilename` field shows `C:\ProgramData\MicrosoftEdgeUpdate\update.txt` written just before the `schtasks` command runs. Cross-reference with Sysmon EID 13 at 09:27:10 to see the resulting registry entry under `HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\TaskCache\Tasks\`.
+
+**Hint 1:** Check Sysmon EID 11 in the 09:26–09:28 window on WIN-WS1. What file was written just before the `schtasks` command? What extension does it have?
+
+**Hint 2:** Now look at the `/XML` argument in the schtasks command from Q2. The extension says `.txt` — but the XML task scheduler format is XML. Why would an attacker choose `.txt`?
+
+**Trainer notes:** Windows Task Scheduler does not validate file extensions when importing via `/XML` — it reads the content, not the extension. A `.txt` file containing valid task XML imports without error. This is a low-effort obfuscation that defeats a surprising number of file-type-based detection rules. Also note the staging directory: `C:\ProgramData\MicrosoftEdgeUpdate\` is the same directory used in Task 1 for the `.xsl` payload, reinforcing that the attacker prepared all artefacts in a single location designed to blend with legitimate Edge update files. Sysmon EID 13 (Registry value set) shows the task being written to the Windows task cache — this can be used as a secondary detection if the file itself is deleted.
+
+---
+
+### Debrief
+
+- EID 4698 is the gold-standard scheduled task detection — it always includes the full XML, making the true payload visible even when the creation method or file extension is obfuscated.
+- The `/XML` import method is less common than `/TR` and should be a dedicated detection rule — the command line alone reveals no executable path.
+- The `.txt` extension on an XML task definition is simple obfuscation that bypasses extension-based file-type checks; defenders should detect based on the EID 4698 `TaskContent`, not the file extension.
+- Task name mimicry (T1036) is best detected by baselining legitimate scheduled tasks on clean builds and alerting on near-matches — not by blocklisting specific names.
 
 ---
 
