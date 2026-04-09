@@ -20,10 +20,26 @@ _SUPPORTED_EIDS = {
 }
 
 
+def _version() -> str:
+    try:
+        from importlib.metadata import version
+        return version("artiforge")
+    except Exception:
+        return "0.1.0"
+
+
 @click.group()
-@click.version_option(package_name="artiforge")
+@click.version_option(
+    version=_version(),
+    prog_name="ArtiForge",
+    message="%(prog)s v%(version)s  |  by D3vn0mi  |  MIT License",
+)
 def main():
-    """ArtiForge — generate realistic Windows event artifacts for training labs."""
+    """ArtiForge — YAML-driven Windows event artifact generator for cybersecurity training labs.
+
+    \b
+    Built by D3vn0mi  |  https://github.com/D3vn0mi/ArtiForge
+    """
 
 
 # ── list-labs ─────────────────────────────────────────────────────────────────
