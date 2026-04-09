@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import random as _random
+import warnings as _warnings
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+
+_CURRENT_SCHEMA_VERSION = "1"
 
 import yaml
 
@@ -123,6 +126,15 @@ def run(
         jitter_seconds: Global ±N second timestamp jitter applied to every event.
             Per-event jitter_seconds takes precedence when non-zero.
     """
+    if spec.lab.lab_schema_version != _CURRENT_SCHEMA_VERSION:
+        _warnings.warn(
+            f"Lab '{spec.lab.id}' uses schema version {spec.lab.lab_schema_version!r}; "
+            f"current engine expects {_CURRENT_SCHEMA_VERSION!r}. "
+            "Some fields may be ignored or cause errors.",
+            UserWarning,
+            stacklevel=2,
+        )
+
     if seed is not None:
         _random.seed(seed)
 
@@ -230,3 +242,62 @@ def run(
             record_id += len(noise_events)
 
     return bundle
+
+
+# ── Bundle comparison ──────────────────────────────────────────────────────────
+
+def compare_bundles(bundle_a: ArtifactBundle, bundle_b: ArtifactBundle) -> dict:
+    """Return a structured diff of two ArtifactBundles.
+
+    Returns a dict with keys:
+      totals_a / totals_b — {total, attack, noise, files}
+      phases_a / phases_b — {phase_id: {name, events}} for attack events
+      eids_a   / eids_b   — {eid: count} for attack events only
+      hosts_a  / hosts_b  — {host: count} for attack events only
+    """
+    def _totals(b: ArtifactBundle) -> dict:
+        attack = [e for e in b.events if e.phase_id != 0]
+        noise  = [e for e in b.events if e.phase_id == 0]
+        return {
+            "total":  len(b.events),
+            "attack": len(attack),
+            "noise":  len(noise),
+            "files":  len(b.files),
+        }
+
+    def _by_phase(b: ArtifactBundle) -> dict:
+        result: dict[int, dict] = {}
+        for ev in b.events:
+            if ev.phase_id == 0:
+                continue
+            if ev.phase_id not in result:
+                result[ev.phase_id] = {"name": ev.phase_name, "events": 0}
+            result[ev.phase_id]["events"] += 1
+        return result
+
+    def _by_eid(b: ArtifactBundle) -> dict:
+        counts: dict[int, int] = {}
+        for ev in b.events:
+            if ev.phase_id != 0:
+                counts[ev.eid] = counts.get(ev.eid, 0) + 1
+        return counts
+
+    def _by_host(b: ArtifactBundle) -> dict:
+        counts: dict[str, int] = {}
+        for ev in b.events:
+            if ev.phase_id != 0:
+                counts[ev.host] = counts.get(ev.host, 0) + 1
+        return counts
+
+    return {
+        "totals_a":  _totals(bundle_a),
+        "totals_b":  _totals(bundle_b),
+        "phases_a":  _by_phase(bundle_a),
+        "phases_b":  _by_phase(bundle_b),
+        "eids_a":    _by_eid(bundle_a),
+        "eids_b":    _by_eid(bundle_b),
+        "hosts_a":   _by_host(bundle_a),
+        "hosts_b":   _by_host(bundle_b),
+        "lab_a":     bundle_a.lab_name,
+        "lab_b":     bundle_b.lab_name,
+    }

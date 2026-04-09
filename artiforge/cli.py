@@ -55,7 +55,9 @@ def main():
 @click.option("--lab", default=None, help="Lab ID to validate (e.g. uc3)")
 @click.option("--lab-path", default=None, type=click.Path(),
               help="Path to a lab.yaml outside the built-in labs directory")
-def validate(lab: str | None, lab_path: str | None):
+@click.option("--strict", is_flag=True, default=False,
+              help="Run additional realism checks (placeholder hashes, offset order, logon precedence)")
+def validate(lab: str | None, lab_path: str | None, strict: bool):
     """Validate a lab YAML — schema check + generator dry-run."""
     if not lab and not lab_path:
         click.echo("Error: provide --lab <id> or --lab-path <path>", err=True)
@@ -119,6 +121,64 @@ def validate(lab: str | None, lab_path: str | None):
         sys.exit(1)
 
     click.echo(f"  EID coverage check OK  (all EIDs implemented)")
+
+    # ── Strict realism checks ─────────────────────────────────────────────────
+    if strict:
+        import re
+        warnings: list[str] = []
+        placeholder_re = re.compile(
+            r'^(SHA256|SHA1|MD5)_HASH_OF_', re.IGNORECASE
+        )
+
+        for phase in spec.attack.phases:
+            # 1. Placeholder hashes in fields
+            for ev in phase.events:
+                for field_name, val in ev.fields.items():
+                    if isinstance(val, str) and placeholder_re.match(val):
+                        warnings.append(
+                            f"Phase {phase.id} EID {ev.eid}: "
+                            f"field '{field_name}' still has a placeholder hash value"
+                        )
+
+            # 2. Offset monotonicity (offset_seconds going backwards)
+            last_offset = -1
+            for ev in phase.events:
+                if ev.offset_seconds < last_offset:
+                    warnings.append(
+                        f"Phase {phase.id} EID {ev.eid}: "
+                        f"offset_seconds {ev.offset_seconds} goes backwards "
+                        f"(previous was {last_offset})"
+                    )
+                last_offset = ev.offset_seconds
+
+        # 3. Logon-before-process-creation (run full bundle, check ordering)
+        try:
+            bundle = engine.run(spec, seed=0)
+            host_first_logon: dict[str, object] = {}
+            for ev in sorted(bundle.events, key=lambda e: e.timestamp):
+                if ev.eid == 4624 and ev.phase_id != 0:
+                    if ev.host not in host_first_logon:
+                        host_first_logon[ev.host] = ev.timestamp
+            for ev in bundle.events:
+                if ev.eid == 4688 and ev.phase_id != 0:
+                    logon_ts = host_first_logon.get(ev.host)
+                    if logon_ts and ev.timestamp < logon_ts:
+                        warnings.append(
+                            f"Phase {ev.phase_id}: 4688 on {ev.host} at "
+                            f"{ev.timestamp.strftime('%H:%M:%S')} occurs before "
+                            f"first 4624 at "
+                            f"{logon_ts.strftime('%H:%M:%S')}"  # type: ignore[union-attr]
+                        )
+        except Exception:
+            pass  # strict check is advisory; don't abort on generator errors
+
+        if warnings:
+            click.echo(f"  Strict checks      WARN  ({len(warnings)} issue(s)):")
+            for w in warnings:
+                click.echo(f"    ⚠  {w}")
+        else:
+            click.echo(f"  Strict checks      OK")
+
     click.echo(f"\n[ArtiForge] Lab is valid. Run: artiforge generate --lab {spec.lab.id}\n")
 
 
@@ -425,6 +485,264 @@ def _write_import_md(run_dir: Path, bundle, formats: list[str]):
 
     (run_dir / "IMPORT.md").write_text("\n".join(lines), encoding="utf-8")
 
+
+
+# ── check ─────────────────────────────────────────────────────────────────────
+
+@main.command("check")
+@click.option("--lab", default=None, help="Lab ID (e.g. uc3)")
+@click.option("--lab-path", default=None, type=click.Path(),
+              help="Path to a lab.yaml outside the built-in labs directory")
+@click.option("--seed", default=None, type=int,
+              help="RNG seed for deterministic generation")
+@click.option("--jitter", default=0, type=int,
+              help="Global ±N second timestamp jitter")
+def check(lab: str | None, lab_path: str | None, seed: int | None, jitter: int):
+    """Run built-in detection rules against a generated bundle and report coverage."""
+    if not lab and not lab_path:
+        click.echo("Error: provide --lab <id> or --lab-path <path>", err=True)
+        sys.exit(1)
+
+    try:
+        spec = engine.load_lab_from_path(Path(lab_path)) if lab_path else engine.load_lab(lab)
+    except FileNotFoundError as exc:
+        click.echo(f"Error: {exc}", err=True)
+        sys.exit(1)
+
+    try:
+        bundle = engine.run(spec, seed=seed, jitter_seconds=jitter)
+    except Exception as exc:
+        click.echo(f"Error during generation: {exc}", err=True)
+        sys.exit(1)
+
+    from artiforge.detectors import RULES, run_rules
+    results = run_rules(bundle)
+    attack_count = sum(1 for e in bundle.events if e.phase_id != 0)
+    fired_count = sum(1 for r in results if r["fired"])
+
+    click.echo(f"\n[ArtiForge] Checking lab: {spec.lab.name}")
+    click.echo(f"  {len(RULES)} rules  ·  {attack_count} attack events  ·  {len(bundle.events)} total\n")
+
+    id_w    = max(len(r["rule"].id)        for r in results)
+    name_w  = max(len(r["rule"].name)      for r in results)
+    tech_w  = max(len(r["rule"].technique) for r in results)
+
+    for r in results:
+        rule    = r["rule"]
+        fired   = r["fired"]
+        count   = len(r["matches"])
+        status  = "FIRED" if fired else "NOT  "
+        noun    = "event" if count == 1 else "events"
+        click.echo(
+            f"  {status}  {rule.id:<{id_w}}  "
+            f"{rule.name:<{name_w}}  "
+            f"{rule.technique:<{tech_w}}  "
+            f"({count} {noun})"
+        )
+
+    pct = fired_count / len(RULES) * 100
+    click.echo(f"\n  Coverage: {fired_count}/{len(RULES)} rules fired ({pct:.1f}%)")
+    if fired_count == 0:
+        click.echo("  ⚠  No rules fired — the attack chain may not be detectable.")
+    elif fired_count == len(RULES):
+        click.echo("  Lab covers all built-in detection techniques.")
+    else:
+        click.echo("  Lab is detectable. Add events to cover unfired rules.")
+    click.echo()
+
+
+# ── diff ──────────────────────────────────────────────────────────────────────
+
+@main.command("diff")
+@click.option("--lab",        default=None, help="First lab ID")
+@click.option("--lab-path",   default=None, type=click.Path(), help="First lab YAML path")
+@click.option("--other",      default=None, help="Second lab ID")
+@click.option("--other-path", default=None, type=click.Path(), help="Second lab YAML path")
+@click.option("--seed", default=None, type=int,
+              help="RNG seed (same seed applied to both bundles for a fair comparison)")
+def diff(lab: str | None, lab_path: str | None,
+         other: str | None, other_path: str | None,
+         seed: int | None):
+    """Compare two labs — show how their generated bundles differ."""
+    if not (lab or lab_path):
+        click.echo("Error: provide --lab or --lab-path for the first lab", err=True)
+        sys.exit(1)
+    if not (other or other_path):
+        click.echo("Error: provide --other or --other-path for the second lab", err=True)
+        sys.exit(1)
+
+    try:
+        spec_a = engine.load_lab_from_path(Path(lab_path)) if lab_path else engine.load_lab(lab)
+        spec_b = engine.load_lab_from_path(Path(other_path)) if other_path else engine.load_lab(other)
+    except FileNotFoundError as exc:
+        click.echo(f"Error: {exc}", err=True)
+        sys.exit(1)
+
+    try:
+        bundle_a = engine.run(spec_a, seed=seed)
+        bundle_b = engine.run(spec_b, seed=seed)
+    except Exception as exc:
+        click.echo(f"Error during generation: {exc}", err=True)
+        sys.exit(1)
+
+    result = engine.compare_bundles(bundle_a, bundle_b)
+    ta, tb = result["totals_a"], result["totals_b"]
+    pa, pb = result["phases_a"], result["phases_b"]
+    ea, eb = result["eids_a"],   result["eids_b"]
+
+    def _delta(a: int, b: int) -> str:
+        d = b - a
+        return f"+{d}" if d > 0 else str(d) if d < 0 else "="
+
+    name_a = result["lab_a"]
+    name_b = result["lab_b"]
+    col = max(len(name_a), len(name_b), 20)
+
+    click.echo(f"\n[ArtiForge] Diff: {name_a}  vs  {name_b}\n")
+    click.echo(f"  {'Metric':<28} {'A':>{col}}  {'B':>{col}}  {'Delta':>7}")
+    click.echo("  " + "─" * (28 + col * 2 + 13))
+
+    rows = [
+        ("Total events",    ta["total"],  tb["total"]),
+        ("  Attack events", ta["attack"], tb["attack"]),
+        ("  Noise events",  ta["noise"],  tb["noise"]),
+        ("File artifacts",  ta["files"],  tb["files"]),
+    ]
+    for label, a_val, b_val in rows:
+        click.echo(f"  {label:<28} {a_val:>{col}}  {b_val:>{col}}  {_delta(a_val, b_val):>7}")
+
+    # Per-phase attack event counts
+    all_phase_ids = sorted(set(list(pa.keys()) + list(pb.keys())))
+    if all_phase_ids:
+        click.echo(f"\n  {'Attack events by phase':<28} {'A':>{col}}  {'B':>{col}}  {'Delta':>7}")
+        click.echo("  " + "─" * (28 + col * 2 + 13))
+        for pid in all_phase_ids:
+            pa_data = pa.get(pid, {"name": pb.get(pid, {}).get("name", f"Phase {pid}"), "events": 0})
+            pb_data = pb.get(pid, {"name": pa.get(pid, {}).get("name", f"Phase {pid}"), "events": 0})
+            label = f"  Phase {pid}  {pa_data['name'][:18]}"
+            click.echo(
+                f"  {label:<28} {pa_data['events']:>{col}}  {pb_data['events']:>{col}}  "
+                f"{_delta(pa_data['events'], pb_data['events']):>7}"
+            )
+
+    # Per-EID counts (attack only, show EIDs present in either bundle)
+    all_eids = sorted(set(list(ea.keys()) + list(eb.keys())))
+    if all_eids:
+        click.echo(f"\n  {'Attack events by EID':<28} {'A':>{col}}  {'B':>{col}}  {'Delta':>7}")
+        click.echo("  " + "─" * (28 + col * 2 + 13))
+        for eid in all_eids:
+            a_c = ea.get(eid, 0)
+            b_c = eb.get(eid, 0)
+            click.echo(f"  {'  EID ' + str(eid):<28} {a_c:>{col}}  {b_c:>{col}}  {_delta(a_c, b_c):>7}")
+
+    click.echo()
+
+
+# ── graph ─────────────────────────────────────────────────────────────────────
+
+@main.command("graph")
+@click.option("--lab", default=None, help="Lab ID (e.g. uc3)")
+@click.option("--lab-path", default=None, type=click.Path(),
+              help="Path to a lab.yaml outside the built-in labs directory")
+@click.option("--seed", default=None, type=int, help="RNG seed for deterministic generation")
+def graph(lab: str | None, lab_path: str | None, seed: int | None):
+    """Show the phase dependency graph — which events are correlated via GUID/LogonId."""
+    if not lab and not lab_path:
+        click.echo("Error: provide --lab <id> or --lab-path <path>", err=True)
+        sys.exit(1)
+
+    try:
+        spec = engine.load_lab_from_path(Path(lab_path)) if lab_path else engine.load_lab(lab)
+    except FileNotFoundError as exc:
+        click.echo(f"Error: {exc}", err=True)
+        sys.exit(1)
+
+    try:
+        bundle = engine.run(spec, seed=seed)
+    except Exception as exc:
+        click.echo(f"Error during generation: {exc}", err=True)
+        sys.exit(1)
+
+    # Collect correlation fields: ProcessGuid → list of events, LogonId → list of events
+    attack_events = [e for e in bundle.events if e.phase_id != 0]
+
+    # Build maps: guid/logon_id → events that produce it (Sysmon 1 → ProcessGuid)
+    #             guid/logon_id → events that consume it (Sysmon 3/5/... → ProcessGuid)
+    guid_producers:  dict[str, list] = {}
+    guid_consumers:  dict[str, list] = {}
+    logon_producers: dict[str, list] = {}
+    logon_consumers: dict[str, list] = {}
+
+    for ev in attack_events:
+        ed = ev.event_data
+        # ProcessGuid: produced by Sysmon 1, consumed by Sysmon 3/5/7/8/10/...
+        if ev.eid == 1 and ev.channel == "Sysmon":
+            guid = ed.get("ProcessGuid", "")
+            if guid:
+                guid_producers.setdefault(guid, []).append(ev)
+        elif ev.channel == "Sysmon":
+            for key in ("ProcessGuid", "ParentProcessGuid", "SourceProcessGuid",
+                        "TargetProcessGuid"):
+                guid = ed.get(key, "")
+                if guid:
+                    guid_consumers.setdefault(guid, []).append(ev)
+
+        # LogonId: produced by 4624/4648, consumed by 4688/4672/...
+        if ev.eid in (4624, 4648):
+            lid = ed.get("TargetLogonId", ed.get("SubjectLogonId", ""))
+            if lid and lid not in ("0x0", "0x3e7", "0x3e4"):
+                logon_producers.setdefault(lid, []).append(ev)
+        elif ev.eid in (4688, 4672, 4698, 4634):
+            for key in ("SubjectLogonId", "TargetLogonId"):
+                lid = ed.get(key, "")
+                if lid and lid not in ("0x0", "0x3e7", "0x3e4"):
+                    logon_consumers.setdefault(lid, []).append(ev)
+
+    def _ev_label(ev) -> str:
+        desc = ev.event_data.get("Image", ev.event_data.get("TargetUserName",
+               ev.event_data.get("ServiceName", "")))
+        short = desc.split("\\")[-1] if desc else ""
+        tag = f"  [{short}]" if short else ""
+        return f"[Ph{ev.phase_id}] EID {ev.eid} on {ev.host}{tag}"
+
+    click.echo(f"\n[ArtiForge] Dependency graph: {spec.lab.name}\n")
+
+    # ProcessGuid chains
+    all_guids = set(list(guid_producers.keys()) + list(guid_consumers.keys()))
+    shown_guid = False
+    for guid in all_guids:
+        producers = guid_producers.get(guid, [])
+        consumers = guid_consumers.get(guid, [])
+        if not producers and not consumers:
+            continue
+        shown_guid = True
+        short_guid = guid[:13] + "…" if len(guid) > 14 else guid
+        click.echo(f"  ProcessGuid {short_guid}")
+        for ev in producers:
+            click.echo(f"    ├─ PRODUCES: {_ev_label(ev)}")
+        for ev in consumers:
+            click.echo(f"    └─ CONSUMES: {_ev_label(ev)}")
+
+    if shown_guid:
+        click.echo()
+
+    # LogonId chains
+    all_lids = set(list(logon_producers.keys()) + list(logon_consumers.keys()))
+    for lid in sorted(all_lids):
+        producers = logon_producers.get(lid, [])
+        consumers = logon_consumers.get(lid, [])
+        if not producers and not consumers:
+            continue
+        click.echo(f"  LogonId {lid}")
+        for ev in producers:
+            click.echo(f"    ├─ PRODUCES: {_ev_label(ev)}")
+        for ev in consumers:
+            click.echo(f"    └─ CONSUMES: {_ev_label(ev)}")
+
+    if not all_guids and not all_lids:
+        click.echo("  No ProcessGuid or LogonId correlations found in attack events.")
+
+    click.echo()
 
 
 # ── new-lab ───────────────────────────────────────────────────────────────────

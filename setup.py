@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="artiforge",
-    version="0.3.0",
+    version="0.4.0",
     author="D3vn0mi",
     author_email="",
     description="YAML-driven Windows event artifact generator for cybersecurity training labs.",

@@ -90,21 +90,20 @@ as synthetic. This milestone adds controllable realism layers.
 
 ---
 
-## v0.4 — Lab Quality & Tooling
+## v0.4 — Lab Quality & Tooling ✓ (current)
 
 Better guardrails for scenario authors.
 
-- [ ] `artiforge check` — run all known detection rules against a generated bundle
-  and report which ones fire (confidence that the scenario is detectable)
-- [ ] Lab diff: compare two generated bundles to show what changed between
-  lab YAML edits
-- [ ] Phase dependency graph — visualise which events depend on which via
-  ProcessGuid / LogonId / correlation fields
-- [ ] `artiforge validate --strict` — warn on common realism mistakes:
-  missing logon before process creation, impossible parent/child combos,
-  placeholder hashes still in place, etc.
-- [ ] Schema versioning: `lab_schema_version: "1"` field so the engine
-  can migrate older lab YAML files forward automatically
+- [x] `artiforge check` — run 13 built-in detection rules against a generated bundle
+  and report which ones fire (coverage %)
+- [x] `artiforge diff --lab A --other B` — compare two generated bundles: total events,
+  attack vs noise split, per-phase and per-EID deltas
+- [x] `artiforge graph --lab X` — phase dependency graph showing ProcessGuid and
+  LogonId correlation chains across attack events
+- [x] `artiforge validate --strict` — warns on placeholder hashes, offset monotonicity
+  violations, and process creation before any logon on the same host
+- [x] Schema versioning: `lab_schema_version: "1"` field in LabMeta; engine emits
+  a `UserWarning` when a lab's version does not match the current engine version
 
 ---
 

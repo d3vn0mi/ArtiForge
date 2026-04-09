@@ -431,3 +431,83 @@ def test_noise_seed_deterministic():
     for e1, e2 in zip(n1, n2):
         assert e1.timestamp == e2.timestamp
         assert e1.eid == e2.eid
+
+
+# ── v0.4: Schema versioning ────────────────────────────────────────────────────
+
+def test_schema_version_default_is_1():
+    """LabMeta defaults lab_schema_version to '1'."""
+    spec = engine.load_lab("uc3")
+    assert spec.lab.lab_schema_version == "1"
+
+
+def test_schema_version_mismatch_raises_warning():
+    """Loading a lab with a non-current schema version emits a UserWarning."""
+    import warnings
+    spec = engine.load_lab("uc3")
+    # Patch in a different version
+    object.__setattr__(spec.lab, "lab_schema_version", "99")
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        engine.run(spec, seed=0)
+    version_warnings = [x for x in w if issubclass(x.category, UserWarning)
+                        and "schema version" in str(x.message).lower()]
+    assert len(version_warnings) >= 1
+
+
+# ── v0.4: compare_bundles ─────────────────────────────────────────────────────
+
+@pytest.fixture(scope="module")
+def diff_result():
+    spec_a = engine.load_lab("uc3")
+    spec_b = engine.load_lab("uc3n")
+    ba = engine.run(spec_a, seed=0)
+    bb = engine.run(spec_b, seed=0)
+    return engine.compare_bundles(ba, bb)
+
+
+def test_compare_bundles_has_expected_keys(diff_result):
+    for key in ("totals_a", "totals_b", "phases_a", "phases_b",
+                "eids_a", "eids_b", "hosts_a", "hosts_b", "lab_a", "lab_b"):
+        assert key in diff_result
+
+
+def test_compare_bundles_totals_a_has_no_noise():
+    """UC3 has no noise — noise count should be 0."""
+    spec = engine.load_lab("uc3")
+    ba = engine.run(spec, seed=0)
+    bb = engine.run(spec, seed=0)
+    result = engine.compare_bundles(ba, bb)
+    assert result["totals_a"]["noise"] == 0
+
+
+def test_compare_bundles_totals_b_has_noise():
+    """UC3N has noise — noise count for B should be > 0."""
+    spec_a = engine.load_lab("uc3")
+    spec_b = engine.load_lab("uc3n")
+    ba = engine.run(spec_a, seed=0)
+    bb = engine.run(spec_b, seed=0)
+    result = engine.compare_bundles(ba, bb)
+    assert result["totals_b"]["noise"] > 0
+
+
+def test_compare_bundles_attack_counts_match(diff_result):
+    """UC3 and UC3N have the same attack chain → same attack event count."""
+    assert diff_result["totals_a"]["attack"] == diff_result["totals_b"]["attack"]
+
+
+def test_compare_bundles_phases_present(diff_result):
+    """Both labs have 5 attack phases."""
+    assert len(diff_result["phases_a"]) == 5
+    assert len(diff_result["phases_b"]) == 5
+
+
+def test_compare_bundles_lab_names(diff_result):
+    assert "Egg-Cellent Resume" in diff_result["lab_a"]
+    assert "Egg-Cellent Resume" in diff_result["lab_b"]
+
+
+def test_compare_bundles_eids_present(diff_result):
+    """EID 3 (Sysmon network) must appear in both labs."""
+    assert 3 in diff_result["eids_a"]
+    assert 3 in diff_result["eids_b"]

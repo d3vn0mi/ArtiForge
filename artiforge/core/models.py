@@ -118,6 +118,7 @@ class LabMeta(BaseModel):
     name: str
     description: str = ""
     mitre_version: str = "v14"
+    lab_schema_version: str = "1"
 
 
 class LabSpec(BaseModel):
