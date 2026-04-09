@@ -1,5 +1,22 @@
 services:
 
+  # ── ArtiForge CLI ─────────────────────────────────────────────────────────
+  # One-shot CLI tool — not started by "docker compose up".
+  # Use: docker compose run --rm artiforge <command>
+  # Or:  ./artiforge.sh <command>
+  artiforge:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: artiforge:latest
+    working_dir: /work
+    volumes:
+      - .:/work          # generated artifacts land in your local ./artifacts/
+    profiles:
+      - tool             # excluded from "docker compose up" (lab infra only)
+
+  # ── Lab infrastructure ────────────────────────────────────────────────────
+
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.13.4
     container_name: artiforge-es

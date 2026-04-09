@@ -5,7 +5,7 @@ setup(
     version="0.1.0",
     packages=find_packages(),
     include_package_data=True,
-    package_data={"artiforge": ["labs/**/*.yaml", "labs/**/*.xml"]},
+    package_data={"artiforge": ["labs/**/*.yaml", "labs/**/*.xml", "labs/**/*.md", "labs/**/*.json"]},
     install_requires=[
         "click>=8.1",
         "pyyaml>=6.0",
