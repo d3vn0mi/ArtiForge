@@ -2,8 +2,8 @@
 
 > Maintained by [D3vn0mi](https://github.com/D3vn0mi)
 
-This document tracks planned improvements across four dimensions:
-event coverage, realism, lab ecosystem, and export integrations.
+This document tracks planned improvements across five dimensions:
+event coverage, realism, lab ecosystem, MITRE integration, and distribution.
 Items within each milestone are roughly ordered by priority.
 
 ---
@@ -28,7 +28,7 @@ Items within each milestone are roughly ordered by priority.
 
 ---
 
-## v0.2 — Event Coverage Expansion ✓ (current)
+## v0.2 — Event Coverage Expansion ✓
 
 The core generator layer needs a wider net before more scenarios can be built.
 
@@ -65,7 +65,7 @@ The core generator layer needs a wider net before more scenarios can be built.
 
 ---
 
-## v0.3 — Realism & Noise ✓ (current)
+## v0.3 — Realism & Noise ✓
 
 Real environments are noisy. Artifacts generated in total silence are easy to detect
 as synthetic. This milestone adds controllable realism layers.
@@ -90,7 +90,7 @@ as synthetic. This milestone adds controllable realism layers.
 
 ---
 
-## v0.4 — Lab Quality & Tooling ✓ (current)
+## v0.4 — Lab Quality & Tooling ✓
 
 Better guardrails for scenario authors.
 
@@ -107,18 +107,7 @@ Better guardrails for scenario authors.
 
 ---
 
-## v1.0 — Lab Ecosystem
-
-A standalone tool is useful; a curated library is a training platform.
-
-### Scenario Library (10+ built-in labs)
-- [ ] UC4 — Kerberoasting + Pass-the-Hash lateral movement
-- [ ] UC5 — Supply chain: malicious npm package → C2 beacon
-- [ ] UC6 — Ransomware: file encryption + shadow copy deletion
-- [ ] UC7 — Insider threat: data staging + USB exfiltration
-- [ ] UC8 — Living-off-the-land: wmic/mshta/regsvr32 chains
-- [ ] UC9 — Cloud pivot: IMDS credential theft + lateral to S3
-- [ ] UC10 — Active Directory: DCSync + Golden Ticket
+## v0.5 — MITRE ATT&CK Integration & Web UI (current)
 
 ### MITRE ATT&CK Integration
 - [ ] Navigator layer JSON export for each lab (techniques highlighted per phase)
@@ -130,7 +119,10 @@ A standalone tool is useful; a curated library is a training platform.
 - [ ] Timeline visualisation rendered from the bundle without Kibana
 - [ ] Trainer dashboard: show expected detections alongside generated events
 
-### Kibana Realism (Tier 2 & 3)
+---
+
+## v0.6 — Kibana Realism
+
 - [ ] Rename `artiforge.*` → `labels.*` in NDJSON export (ECS-standard namespace;
   `labels.*` appears in real Winlogbeat data so raw `_source` looks authentic)
   — changes: `exporters/elastic.py`, `scripts/setup_index.sh`, `tests/test_exporters.py`,
@@ -139,7 +131,10 @@ A standalone tool is useful; a curated library is a training platform.
   for max-realism scenarios where phase grading is done out-of-band
   — changes: `exporters/elastic.py` (`include_meta=True` default), `cli.py`
 
-### Distribution
+---
+
+## v0.9 — Distribution
+
 - [ ] PyPI package (`pip install artiforge`)
 - [ ] GitHub Actions CI: test matrix across Python 3.10/3.11/3.12
 - [ ] Pre-built Docker image on GitHub Container Registry (`ghcr.io/d3vn0mi/artiforge`)
@@ -147,24 +142,17 @@ A standalone tool is useful; a curated library is a training platform.
 
 ---
 
-## v1.1 — Export & Integration
+## v1.0 — Scenario Library
 
-Make artifacts importable into more SIEM/EDR platforms without manual transformation.
+A standalone tool is useful; a curated library is a training platform.
 
-### New Export Formats
-- [ ] **Splunk HEC** — JSON payload for the HTTP Event Collector (`/services/collector/event`)
-- [ ] **Microsoft Sentinel** — Log Analytics workspace JSON (`LogManagementAPI` table format)
-- [ ] **QRadar LEEF** — Log Event Extended Format for IBM QRadar
-- [ ] **CEF** — Common Event Format (ArcSight, generic syslog destinations)
-
-### Elastic Improvements
-- [ ] Detection rule NDJSON export (EQL/KQL stubs with MITRE metadata)
-- [ ] Index template + ILM policy auto-creation on first import
-- [ ] Kibana saved search + dashboard NDJSON alongside the bulk import
-
-### Reporting
-- [ ] HTML timeline report — chronological event table with phase colour-coding,
-  rendered from the bundle without requiring Kibana
+- [ ] UC4 — Kerberoasting + Pass-the-Hash lateral movement
+- [ ] UC5 — Supply chain: malicious npm package → C2 beacon
+- [ ] UC6 — Ransomware: file encryption + shadow copy deletion
+- [ ] UC7 — Insider threat: data staging + USB exfiltration
+- [ ] UC8 — Living-off-the-land: wmic/mshta/regsvr32 chains
+- [ ] UC9 — Cloud pivot: IMDS credential theft + lateral to S3
+- [ ] UC10 — Active Directory: DCSync + Golden Ticket
 
 ---
 
