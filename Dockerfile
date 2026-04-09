@@ -7,7 +7,7 @@ COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy the package and install it (non-editable so labs land in site-packages)
-COPY setup.py ./
+COPY setup.py README.md ./
 COPY cli.py ./
 COPY artiforge/ ./artiforge/
 RUN pip install --no-cache-dir .
