@@ -131,6 +131,15 @@ A standalone tool is useful; a curated library is a training platform.
 - [ ] Timeline visualisation rendered from the bundle without Kibana
 - [ ] Trainer dashboard: show expected detections alongside generated events
 
+### Kibana Realism (Tier 2 & 3)
+- [ ] Rename `artiforge.*` → `labels.*` in NDJSON export (ECS-standard namespace;
+  `labels.*` appears in real Winlogbeat data so raw `_source` looks authentic)
+  — changes: `exporters/elastic.py`, `scripts/setup_index.sh`, `tests/test_exporters.py`,
+  `QUICKSTART.md`, `labs/uc3n/trainee_brief.md`, `labs/uc3/trainer_guide.md`
+- [ ] `--no-meta` flag on `generate` — strips the `labels` block entirely from NDJSON
+  for max-realism scenarios where phase grading is done out-of-band
+  — changes: `exporters/elastic.py` (`include_meta=True` default), `cli.py`
+
 ### Distribution
 - [ ] PyPI package (`pip install artiforge`)
 - [ ] GitHub Actions CI: test matrix across Python 3.10/3.11/3.12
