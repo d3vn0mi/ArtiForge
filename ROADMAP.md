@@ -2,13 +2,13 @@
 
 > Maintained by [D3vn0mi](https://github.com/D3vn0mi)
 
-This document tracks planned improvements across four dimensions:
-event coverage, realism, lab ecosystem, and export integrations.
+This document tracks planned improvements across five dimensions:
+event coverage, realism, lab ecosystem, MITRE integration, and distribution.
 Items within each milestone are roughly ordered by priority.
 
 ---
 
-## v0.1 — Foundation ✓ (current)
+## v0.1 — Foundation ✓
 
 - [x] YAML-driven lab specification with Pydantic v2 validation
 - [x] Security channel: 4624, 4625, 4634, 4648, 4672, 4688, 4698, 4720, 4732, 4776
@@ -28,112 +28,117 @@ Items within each milestone are roughly ordered by priority.
 
 ---
 
-## v0.2 — Event Coverage Expansion
+## v0.2 — Event Coverage Expansion ✓
 
 The core generator layer needs a wider net before more scenarios can be built.
 
 ### Authentication & Account Events (Security)
-- [ ] **4625** — Failed logon (wrong password, locked account, disabled account)
-- [ ] **4768** — Kerberos TGT requested (AS-REQ)
-- [ ] **4769** — Kerberos service ticket requested (TGS-REQ)
-- [ ] **4771** — Kerberos pre-authentication failed (bad password at DC)
-- [ ] **4723/4724** — Password change / password reset by admin
-- [ ] **4725/4726** — Account disabled / account deleted
+- [x] **4768** — Kerberos TGT requested (AS-REQ)
+- [x] **4769** — Kerberos service ticket requested (TGS-REQ)
+- [x] **4771** — Kerberos pre-authentication failed (bad password at DC)
+- [x] **4723/4724** — Password change / password reset by admin
+- [x] **4725/4726** — Account disabled / account deleted
 
 ### Object & Registry Access (Security)
-- [ ] **4656** — A handle to an object was requested
-- [ ] **4663** — An attempt was made to access an object (file read/write/delete)
-- [ ] **4657** — A registry value was modified
-- [ ] **4670** — Permissions on an object were changed
+- [x] **4656** — A handle to an object was requested
+- [x] **4663** — An attempt was made to access an object (file read/write/delete)
+- [x] **4657** — A registry value was modified
+- [x] **4670** — Permissions on an object were changed
 
 ### Network Policy & Firewall (Security / System)
-- [ ] **5156** — Windows Filtering Platform connection allowed
-- [ ] **5157** — Windows Filtering Platform connection blocked
-- [ ] **4946/4947** — Windows Firewall rule added / modified
+- [x] **5156** — Windows Filtering Platform connection allowed
+- [x] **5157** — Windows Filtering Platform connection blocked
+- [x] **4946/4947** — Windows Firewall rule added / modified
 
 ### Sysmon
-- [ ] **5** — Process terminated (pairs with EID 1 for full lifecycle)
-- [ ] **7** — Image loaded (DLL side-loading / reflective injection detection)
-- [ ] **8** — CreateRemoteThread (process injection)
-- [ ] **10** — ProcessAccess (credential dumping via LSASS access)
-- [ ] **12/14** — RegistryEvent: key/value create+delete / key renamed
-- [ ] **17/18** — PipeEvent: pipe created / pipe connected (lateral movement)
-- [ ] **23** — FileDelete (evidence tampering)
-- [ ] **25** — ProcessTampering (process hollowing/herpaderping)
+- [x] **5** — Process terminated (pairs with EID 1 for full lifecycle)
+- [x] **7** — Image loaded (DLL side-loading / reflective injection detection)
+- [x] **8** — CreateRemoteThread (process injection)
+- [x] **10** — ProcessAccess (credential dumping via LSASS access)
+- [x] **12/14** — RegistryEvent: key/value create+delete / key renamed
+- [x] **17/18** — PipeEvent: pipe created / pipe connected (lateral movement)
+- [x] **23** — FileDelete (evidence tampering)
+- [x] **25** — ProcessTampering (process hollowing/herpaderping)
 
 ### WMI Events (Microsoft-Windows-WMI-Activity/Operational)
-- [ ] **5857/5860/5861** — WMI activity: provider loaded, subscription created, filter/consumer bound
+- [x] **5857/5860/5861** — WMI activity: provider loaded, subscription created, filter/consumer bound
 
 ---
 
-## v0.3 — Realism & Noise
+## v0.3 — Realism & Noise ✓
 
 Real environments are noisy. Artifacts generated in total silence are easy to detect
 as synthetic. This milestone adds controllable realism layers.
 
 ### Background Noise
-- [ ] `noise:` section in lab YAML — inject configurable volumes of benign events
+- [x] `noise:` section in lab YAML — inject configurable volumes of benign events
   (user logons, process creation, DNS queries) that trainees must filter out
-- [ ] Common process allowlist (explorer.exe, chrome.exe, svchost.exe) with
-  realistic parent/child chains
-- [ ] Randomised logon/logoff pairs throughout the timeline
+- [x] Common process allowlist (chrome.exe, svchost.exe, RuntimeBroker.exe, etc.)
+  with realistic parent/child chains
+- [x] Randomised logon/logoff pairs (Security 4624 + 4634) throughout the timeline
 
 ### Field Variation
-- [ ] `--seed` flag for deterministic but varied field values (PIDs, GUIDs, ports)
+- [x] `--seed` flag for deterministic but varied field values (PIDs, GUIDs, ports)
   so each generation run looks different while remaining reproducible
-- [ ] Slight timestamp jitter within a configurable window (±N seconds)
-- [ ] Random ProcessGuid / LogonGuid generation mode alongside YAML anchors
+- [x] `--jitter N` global timestamp jitter: each event is shifted ±N seconds
+- [x] Per-event `jitter_seconds` field in YAML for fine-grained control
+- [x] GUIDs generated via seeded RNG (fully deterministic under `--seed`)
 
-### Multi-User Activity
-- [ ] Concurrent session simulation: multiple users active on the same host
-  produce interleaved events with correct `SubjectLogonId` correlations
-- [ ] Beaconing pattern helper: Sysmon 3 repeat with configurable jitter
-  instead of fixed `repeat_gap_seconds`
+### Beaconing Pattern
+- [x] `repeat_jitter_seconds` on EventSpec: adds ±N second variation to each
+  inter-beacon interval for more realistic C2 timing patterns
 
 ---
 
-## v0.4 — Lab Quality & Tooling
+## v0.4 — Lab Quality & Tooling ✓
 
 Better guardrails for scenario authors.
 
-- [ ] `artiforge check` — run all known detection rules against a generated bundle
-  and report which ones fire (confidence that the scenario is detectable)
-- [ ] Lab diff: compare two generated bundles to show what changed between
-  lab YAML edits
-- [ ] Phase dependency graph — visualise which events depend on which via
-  ProcessGuid / LogonId / correlation fields
-- [ ] `artiforge validate --strict` — warn on common realism mistakes:
-  missing logon before process creation, impossible parent/child combos,
-  placeholder hashes still in place, etc.
-- [ ] Schema versioning: `lab_schema_version: "1"` field so the engine
-  can migrate older lab YAML files forward automatically
+- [x] `artiforge check` — run 13 built-in detection rules against a generated bundle
+  and report which ones fire (coverage %)
+- [x] `artiforge diff --lab A --other B` — compare two generated bundles: total events,
+  attack vs noise split, per-phase and per-EID deltas
+- [x] `artiforge graph --lab X` — phase dependency graph showing ProcessGuid and
+  LogonId correlation chains across attack events
+- [x] `artiforge validate --strict` — warns on placeholder hashes, offset monotonicity
+  violations, and process creation before any logon on the same host
+- [x] Schema versioning: `lab_schema_version: "1"` field in LabMeta; engine emits
+  a `UserWarning` when a lab's version does not match the current engine version
 
 ---
 
-## v1.0 — Lab Ecosystem
-
-A standalone tool is useful; a curated library is a training platform.
-
-### Scenario Library (10+ built-in labs)
-- [ ] UC4 — Kerberoasting + Pass-the-Hash lateral movement
-- [ ] UC5 — Supply chain: malicious npm package → C2 beacon
-- [ ] UC6 — Ransomware: file encryption + shadow copy deletion
-- [ ] UC7 — Insider threat: data staging + USB exfiltration
-- [ ] UC8 — Living-off-the-land: wmic/mshta/regsvr32 chains
-- [ ] UC9 — Cloud pivot: IMDS credential theft + lateral to S3
-- [ ] UC10 — Active Directory: DCSync + Golden Ticket
+## v0.5 — MITRE ATT&CK Integration & Web UI ✓
 
 ### MITRE ATT&CK Integration
-- [ ] Navigator layer JSON export for each lab (techniques highlighted per phase)
-- [ ] Inline technique IDs in generated event descriptions
-- [ ] Coverage matrix: which techniques each built-in lab exercises
+- [x] Navigator layer JSON export for each lab (techniques highlighted per phase)
+  — `artiforge navigator --lab uc3` and auto-written by `artiforge generate`
+- [x] Inline technique IDs in generated events — `mitre_techniques` field on
+  `GeneratedEvent`; emitted as ECS `threat.technique.id/name` in Elasticsearch
+- [x] Coverage matrix — `artiforge coverage` prints a techniques × labs table
 
 ### Web UI (optional, Docker only)
-- [ ] Browser-based lab browser + one-click generation
-- [ ] Timeline visualisation rendered from the bundle without Kibana
-- [ ] Trainer dashboard: show expected detections alongside generated events
+- [x] Browser-based lab browser — `artiforge serve` (requires `pip install artiforge[web]`)
+- [x] Timeline visualisation rendered from the bundle without Kibana
+  — colour-coded by phase, noise toggle, per-phase filter, MITRE badges
+- [x] Trainer dashboard — detection rule results (fired/not, match counts,
+  coverage %) and phase summary alongside the generated event timeline
 
-### Distribution
+---
+
+## v0.6 — Kibana Realism
+
+- [ ] Rename `artiforge.*` → `labels.*` in NDJSON export (ECS-standard namespace;
+  `labels.*` appears in real Winlogbeat data so raw `_source` looks authentic)
+  — changes: `exporters/elastic.py`, `scripts/setup_index.sh`, `tests/test_exporters.py`,
+  `QUICKSTART.md`, `labs/uc3n/trainee_brief.md`, `labs/uc3/trainer_guide.md`
+- [ ] `--no-meta` flag on `generate` — strips the `labels` block entirely from NDJSON
+  for max-realism scenarios where phase grading is done out-of-band
+  — changes: `exporters/elastic.py` (`include_meta=True` default), `cli.py`
+
+---
+
+## v0.9 — Distribution
+
 - [ ] PyPI package (`pip install artiforge`)
 - [ ] GitHub Actions CI: test matrix across Python 3.10/3.11/3.12
 - [ ] Pre-built Docker image on GitHub Container Registry (`ghcr.io/d3vn0mi/artiforge`)
@@ -141,24 +146,17 @@ A standalone tool is useful; a curated library is a training platform.
 
 ---
 
-## v1.1 — Export & Integration
+## v1.0 — Scenario Library
 
-Make artifacts importable into more SIEM/EDR platforms without manual transformation.
+A standalone tool is useful; a curated library is a training platform.
 
-### New Export Formats
-- [ ] **Splunk HEC** — JSON payload for the HTTP Event Collector (`/services/collector/event`)
-- [ ] **Microsoft Sentinel** — Log Analytics workspace JSON (`LogManagementAPI` table format)
-- [ ] **QRadar LEEF** — Log Event Extended Format for IBM QRadar
-- [ ] **CEF** — Common Event Format (ArcSight, generic syslog destinations)
-
-### Elastic Improvements
-- [ ] Detection rule NDJSON export (EQL/KQL stubs with MITRE metadata)
-- [ ] Index template + ILM policy auto-creation on first import
-- [ ] Kibana saved search + dashboard NDJSON alongside the bulk import
-
-### Reporting
-- [ ] HTML timeline report — chronological event table with phase colour-coding,
-  rendered from the bundle without requiring Kibana
+- [ ] UC4 — Kerberoasting + Pass-the-Hash lateral movement
+- [ ] UC5 — Supply chain: malicious npm package → C2 beacon
+- [ ] UC6 — Ransomware: file encryption + shadow copy deletion
+- [ ] UC7 — Insider threat: data staging + USB exfiltration
+- [ ] UC8 — Living-off-the-land: wmic/mshta/regsvr32 chains
+- [ ] UC9 — Cloud pivot: IMDS credential theft + lateral to S3
+- [ ] UC10 — Active Directory: DCSync + Golden Ticket
 
 ---
 

@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
-import importlib.resources
-from datetime import datetime, timezone
+import random as _random
+import warnings as _warnings
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+
+_CURRENT_SCHEMA_VERSION = "1"
 
 import yaml
 
@@ -20,6 +23,7 @@ from artiforge.core.models import (
 )
 from artiforge.core.timeline import parse_base_time, resolve
 from artiforge.generators import dispatch_event, dispatch_file
+from artiforge.generators import noise as _noise_gen
 
 
 # ── Provider metadata ──────────────────────────────────────────────────────────
@@ -30,6 +34,7 @@ _PROVIDER = {
     "Sysmon":      ("Microsoft-Windows-Sysmon",            "{5770385F-C22A-43E0-BF4C-06F5698FFBD9}"),
     "Application": ("Application",                         "{00000000-0000-0000-0000-000000000000}"),
     "PowerShell":  ("Microsoft-Windows-PowerShell",        "{A0C1853B-5C40-4B15-8766-3CF1C58F985A}"),
+    "WMI":         ("Microsoft-Windows-WMI-Activity",      "{1418EF04-B0B4-4623-BF7E-D74AB47BBDAA}"),
 }
 
 
@@ -108,8 +113,30 @@ def run(
     spec: LabSpec,
     base_time_override: datetime | None = None,
     phase_filter: list[int] | None = None,
+    seed: int | None = None,
+    jitter_seconds: int = 0,
 ) -> ArtifactBundle:
-    """Generate all artifacts for a lab spec."""
+    """Generate all artifacts for a lab spec.
+
+    Args:
+        spec: Validated lab specification.
+        base_time_override: Override the base_time from the YAML.
+        phase_filter: Restrict generation to these phase IDs only.
+        seed: RNG seed for deterministic generation. None = random each run.
+        jitter_seconds: Global ±N second timestamp jitter applied to every event.
+            Per-event jitter_seconds takes precedence when non-zero.
+    """
+    if spec.lab.lab_schema_version != _CURRENT_SCHEMA_VERSION:
+        _warnings.warn(
+            f"Lab '{spec.lab.id}' uses schema version {spec.lab.lab_schema_version!r}; "
+            f"current engine expects {_CURRENT_SCHEMA_VERSION!r}. "
+            "Some fields may be ignored or cause errors.",
+            UserWarning,
+            stacklevel=2,
+        )
+
+    if seed is not None:
+        _random.seed(seed)
 
     base_time = base_time_override or parse_base_time(spec.attack.base_time)
 
@@ -145,12 +172,28 @@ def run(
             if event_spec.provider:
                 prov_name = event_spec.provider
 
+            # Effective per-event jitter (event-level overrides global)
+            ev_jitter = event_spec.jitter_seconds or jitter_seconds
+
+            # Track cumulative offset separately so repeat_jitter applies
+            # to each inter-event gap, not to the total from zero.
+            cumulative_gap = event_spec.offset_seconds
+
             for repeat_idx in range(event_spec.repeat):
-                ts = resolve(
-                    phase_base,
-                    0,
-                    event_spec.offset_seconds + repeat_idx * event_spec.repeat_gap_seconds,
-                )
+                if repeat_idx > 0:
+                    interval = event_spec.repeat_gap_seconds
+                    if event_spec.repeat_jitter_seconds:
+                        interval += _random.randint(
+                            -event_spec.repeat_jitter_seconds,
+                            event_spec.repeat_jitter_seconds,
+                        )
+                    cumulative_gap += interval
+
+                ts = resolve(phase_base, 0, cumulative_gap)
+
+                # Apply timestamp jitter
+                if ev_jitter:
+                    ts = ts + timedelta(seconds=_random.randint(-ev_jitter, ev_jitter))
 
                 event_data = dispatch_event(
                     channel=event_spec.channel,
@@ -175,6 +218,7 @@ def run(
                         event_data=event_data,
                         phase_id=phase.id,
                         phase_name=phase.name,
+                        mitre_techniques=list(phase.mitre),
                     )
                 )
                 record_id += 1
@@ -185,4 +229,76 @@ def run(
             if gen_file:
                 bundle.files.append(gen_file)
 
+    # Noise injection — only when not running a phase-filtered subset
+    if not phase_filter and spec.attack.noise:
+        for noise_spec in spec.attack.noise:
+            host = _resolve_host(spec, noise_spec.host)
+            noise_events = _noise_gen.generate(
+                noise_spec=noise_spec,
+                host=host,
+                base_time=base_time,
+                record_id_start=record_id,
+            )
+            bundle.events.extend(noise_events)
+            record_id += len(noise_events)
+
     return bundle
+
+
+# ── Bundle comparison ──────────────────────────────────────────────────────────
+
+def compare_bundles(bundle_a: ArtifactBundle, bundle_b: ArtifactBundle) -> dict:
+    """Return a structured diff of two ArtifactBundles.
+
+    Returns a dict with keys:
+      totals_a / totals_b — {total, attack, noise, files}
+      phases_a / phases_b — {phase_id: {name, events}} for attack events
+      eids_a   / eids_b   — {eid: count} for attack events only
+      hosts_a  / hosts_b  — {host: count} for attack events only
+    """
+    def _totals(b: ArtifactBundle) -> dict:
+        attack = [e for e in b.events if e.phase_id != 0]
+        noise  = [e for e in b.events if e.phase_id == 0]
+        return {
+            "total":  len(b.events),
+            "attack": len(attack),
+            "noise":  len(noise),
+            "files":  len(b.files),
+        }
+
+    def _by_phase(b: ArtifactBundle) -> dict:
+        result: dict[int, dict] = {}
+        for ev in b.events:
+            if ev.phase_id == 0:
+                continue
+            if ev.phase_id not in result:
+                result[ev.phase_id] = {"name": ev.phase_name, "events": 0}
+            result[ev.phase_id]["events"] += 1
+        return result
+
+    def _by_eid(b: ArtifactBundle) -> dict:
+        counts: dict[int, int] = {}
+        for ev in b.events:
+            if ev.phase_id != 0:
+                counts[ev.eid] = counts.get(ev.eid, 0) + 1
+        return counts
+
+    def _by_host(b: ArtifactBundle) -> dict:
+        counts: dict[str, int] = {}
+        for ev in b.events:
+            if ev.phase_id != 0:
+                counts[ev.host] = counts.get(ev.host, 0) + 1
+        return counts
+
+    return {
+        "totals_a":  _totals(bundle_a),
+        "totals_b":  _totals(bundle_b),
+        "phases_a":  _by_phase(bundle_a),
+        "phases_b":  _by_phase(bundle_b),
+        "eids_a":    _by_eid(bundle_a),
+        "eids_b":    _by_eid(bundle_b),
+        "hosts_a":   _by_host(bundle_a),
+        "hosts_b":   _by_host(bundle_b),
+        "lab_a":     bundle_a.lab_name,
+        "lab_b":     bundle_b.lab_name,
+    }

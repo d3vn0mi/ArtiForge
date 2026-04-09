@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from artiforge.core.models import FileArtifactSpec, GeneratedFile, Host, Phase, User
-from artiforge.generators import application, files, powershell, security, sysmon, system
+from artiforge.generators import application, files, powershell, security, sysmon, system, wmi
 
 _CHANNEL_MAP = {
     "Security":    security,
@@ -13,6 +13,7 @@ _CHANNEL_MAP = {
     "Sysmon":      sysmon,
     "Application": application,
     "PowerShell":  powershell,
+    "WMI":         wmi,
 }
 
 

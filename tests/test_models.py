@@ -102,3 +102,23 @@ def test_zero_repeat_raises():
 def test_invalid_artifact_type_raises():
     with pytest.raises(ValidationError):
         FileArtifactSpec(type="xml", dest=r"C:\foo\bar.xml")  # "xml" not in Literal
+
+
+# ── v0.4: Schema versioning ────────────────────────────────────────────────────
+
+def test_lab_meta_default_schema_version():
+    from artiforge.core.models import LabMeta
+    meta = LabMeta(id="test", name="Test Lab")
+    assert meta.lab_schema_version == "1"
+
+
+def test_lab_meta_custom_schema_version():
+    from artiforge.core.models import LabMeta
+    meta = LabMeta(id="test", name="Test Lab", lab_schema_version="2")
+    assert meta.lab_schema_version == "2"
+
+
+def test_uc3_lab_has_schema_version():
+    from artiforge.core import engine
+    spec = engine.load_lab("uc3")
+    assert spec.lab.lab_schema_version == "1"

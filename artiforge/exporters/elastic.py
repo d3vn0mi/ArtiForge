@@ -15,6 +15,7 @@ import json
 from pathlib import Path
 
 from artiforge.core.models import ArtifactBundle, GeneratedEvent
+from artiforge.mitre.technique_names import TECHNIQUE_NAMES
 
 # Map ArtiForge channel names → ECS log.name values
 _ECS_LOG_NAME = {
@@ -23,6 +24,7 @@ _ECS_LOG_NAME = {
     "Sysmon":      "Microsoft-Windows-Sysmon/Operational",
     "Application": "Application",
     "PowerShell":  "Microsoft-Windows-PowerShell/Operational",
+    "WMI":         "Microsoft-Windows-WMI-Activity/Operational",
 }
 
 _ECS_PROVIDER = {
@@ -31,21 +33,52 @@ _ECS_PROVIDER = {
     "Sysmon":      "Microsoft-Windows-Sysmon",
     "Application": "Application",
     "PowerShell":  "Microsoft-Windows-PowerShell",
+    "WMI":         "Microsoft-Windows-WMI-Activity",
 }
 
 _ECS_CATEGORY: dict[int, list[str]] = {
+    # Authentication / Logon
     4624: ["authentication"], 4625: ["authentication"],
     4634: ["authentication"], 4648: ["authentication"],
-    4672: ["authentication"], 4688: ["process"],
-    4698: ["configuration"],  4720: ["iam"],
-    4732: ["iam"],            4776: ["authentication"],
-    7036: ["configuration"],  7045: ["configuration"],
-    1:    ["process"],
-    3:    ["network"],
-    11:   ["file"],
-    13:   ["registry"],
-    22:   ["network"],
-    4103: ["process"],        4104: ["process"],
+    4672: ["authentication"], 4776: ["authentication"],
+    # Kerberos
+    4768: ["authentication"], 4769: ["authentication"], 4771: ["authentication"],
+    # Process
+    4688: ["process"],
+    # Scheduled tasks
+    4698: ["configuration"],
+    # Account management
+    4720: ["iam"], 4723: ["iam"], 4724: ["iam"],
+    4725: ["iam"], 4726: ["iam"], 4732: ["iam"],
+    # Object access / handles
+    4656: ["file"], 4663: ["file"], 4670: ["file"],
+    # Registry
+    4657: ["registry"],
+    # Windows Filtering Platform / Firewall
+    5156: ["network"], 5157: ["network"],
+    4946: ["configuration"], 4947: ["configuration"],
+    # System
+    7036: ["configuration"], 7045: ["configuration"],
+    # Sysmon
+    1:  ["process"],
+    3:  ["network"],
+    5:  ["process"],
+    7:  ["file"],
+    8:  ["process"],
+    10: ["process"],
+    11: ["file"],
+    12: ["registry"],
+    13: ["registry"],
+    14: ["registry"],
+    17: ["network"],
+    18: ["network"],
+    22: ["network"],
+    23: ["file"],
+    25: ["process"],
+    # PowerShell
+    4103: ["process"], 4104: ["process"],
+    # WMI
+    5857: ["configuration"], 5860: ["configuration"], 5861: ["configuration"],
 }
 
 
@@ -113,6 +146,17 @@ def _to_ecs(ev: GeneratedEvent) -> dict:
         doc["network"] = {
             "protocol": ed.get("Protocol", "tcp"),
             "direction": "egress",
+        }
+
+    # MITRE ATT&CK threat fields (ECS threat.* namespace)
+    if ev.mitre_techniques:
+        tids = ev.mitre_techniques
+        doc["threat"] = {
+            "framework": "MITRE ATT&CK",
+            "technique": {
+                "id":   tids,
+                "name": [TECHNIQUE_NAMES.get(t, t) for t in tids],
+            },
         }
 
     return doc

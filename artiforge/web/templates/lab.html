@@ -1,0 +1,289 @@
+{% extends "base.html" %}
+{% block title %}{{ spec.lab.name }} — ArtiForge{% endblock %}
+{% block content %}
+
+{# ── Breadcrumb + header ──────────────────────────────────────────────────── #}
+<nav aria-label="breadcrumb" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="/" class="text-secondary">Labs</a></li>
+    <li class="breadcrumb-item active font-monospace">{{ spec.lab.id }}</li>
+  </ol>
+</nav>
+
+<div class="row mb-3 align-items-end">
+  <div class="col">
+    <h4 class="mb-1">{{ spec.lab.name }}</h4>
+    <span class="text-secondary small">{{ spec.lab.description }}</span>
+  </div>
+  <div class="col-auto">
+    <form class="d-flex gap-2 align-items-center" method="get">
+      <label class="text-secondary small mb-0">Seed</label>
+      <input type="number" name="seed" value="{{ seed if seed is not none else '' }}"
+             placeholder="random" class="form-control form-control-sm"
+             style="width:100px; background:#161b22; color:#e6edf3; border-color:#30363d;">
+      <label class="text-secondary small mb-0">Jitter</label>
+      <input type="number" name="jitter" value="{{ jitter }}" min="0"
+             class="form-control form-control-sm"
+             style="width:70px; background:#161b22; color:#e6edf3; border-color:#30363d;">
+      <input type="hidden" name="tab" value="{{ tab }}">
+      <button class="btn btn-sm btn-outline-secondary" type="submit">Regenerate</button>
+    </form>
+  </div>
+</div>
+
+{# ── Stat pills ───────────────────────────────────────────────────────────── #}
+<div class="d-flex gap-2 mb-4 flex-wrap">
+  <span class="badge bg-dark border">{{ attack_count }} attack events</span>
+  <span class="badge bg-dark border">{{ noise_count }} noise events</span>
+  <span class="badge bg-dark border">{{ spec.attack.phases|length }} phases</span>
+  <span class="badge bg-dark border">{{ all_tids|length }} techniques</span>
+  <span class="badge bg-dark border">{{ spec.infrastructure.domain }}</span>
+</div>
+
+{# ── Tabs ─────────────────────────────────────────────────────────────────── #}
+<ul class="nav nav-tabs mb-4" id="labTabs">
+  <li class="nav-item">
+    <a class="nav-link {% if tab == 'timeline' %}active{% endif %}"
+       href="?tab=timeline{% if seed is not none %}&seed={{ seed }}{% endif %}&jitter={{ jitter }}">
+      Timeline
+    </a>
+  </li>
+  <li class="nav-item">
+    <a class="nav-link {% if tab == 'dashboard' %}active{% endif %}"
+       href="?tab=dashboard{% if seed is not none %}&seed={{ seed }}{% endif %}&jitter={{ jitter }}">
+      Trainer Dashboard
+    </a>
+  </li>
+  <li class="nav-item">
+    <a class="nav-link {% if tab == 'overview' %}active{% endif %}"
+       href="?tab=overview{% if seed is not none %}&seed={{ seed }}{% endif %}&jitter={{ jitter }}">
+      Overview
+    </a>
+  </li>
+</ul>
+
+{# ════════════════════════════════════════════════════════════════════════════
+   TAB: TIMELINE
+   ════════════════════════════════════════════════════════════════════════════ #}
+{% if tab == "timeline" %}
+
+<div class="mb-3 d-flex gap-2 flex-wrap">
+  <button class="btn btn-sm btn-outline-secondary" onclick="toggleNoise()">Toggle noise</button>
+  {% for ph in phase_summary %}
+  <span class="badge" style="background:{{ ph.colour }}20; color:{{ ph.colour }}; border:1px solid {{ ph.colour }}40; cursor:pointer;"
+        onclick="filterPhase({{ ph.id }})">
+    Ph{{ ph.id }}: {{ ph.name[:20] }}
+  </span>
+  {% endfor %}
+  <span class="badge bg-secondary" style="cursor:pointer;" onclick="filterPhase(0)">noise</span>
+  <span class="badge bg-dark border" style="cursor:pointer;" onclick="clearFilter()">clear filter</span>
+</div>
+
+<div class="table-responsive">
+<table class="table table-sm table-hover align-middle" id="timelineTable" style="font-size:.82rem;">
+  <thead class="text-secondary" style="border-bottom:1px solid #30363d;">
+    <tr>
+      <th>Time</th>
+      <th>Phase</th>
+      <th>Host</th>
+      <th>Ch</th>
+      <th>EID</th>
+      <th>Description</th>
+      <th>Techniques</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for ev in timeline %}
+  <tr class="{% if ev.phase_id == 0 %}event-row-noise{% endif %}"
+      data-phase="{{ ev.phase_id }}">
+    <td class="font-monospace text-secondary">{{ ev.ts }}</td>
+    <td>
+      <span class="phase-dot" style="background:{{ ev.colour }};"></span>
+      <span class="text-secondary small">{% if ev.phase_id == 0 %}noise{% else %}Ph{{ ev.phase_id }}{% endif %}</span>
+    </td>
+    <td class="font-monospace text-secondary small">{{ ev.host }}</td>
+    <td class="text-secondary small">{{ ev.channel[:6] }}</td>
+    <td class="font-monospace">{{ ev.eid }}</td>
+    <td>{{ ev.summary }}</td>
+    <td>
+      {% for tid in ev.techniques %}
+      <span class="badge badge-technique" style="background:#1a2a4a; color:#79c0ff; border:1px solid #1f4e8c;">{{ tid }}</span>
+      {% endfor %}
+    </td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+
+{% block scripts %}{% endblock %}
+<script>
+  let noiseVisible = true;
+  let activePhase  = null;
+
+  function applyFilter() {
+    document.querySelectorAll("#timelineTable tbody tr").forEach(row => {
+      const ph = parseInt(row.dataset.phase);
+      let show = true;
+      if (!noiseVisible && ph === 0) show = false;
+      if (activePhase !== null && ph !== activePhase) show = false;
+      row.style.display = show ? "" : "none";
+    });
+  }
+  function toggleNoise()      { noiseVisible = !noiseVisible; applyFilter(); }
+  function filterPhase(ph)    { activePhase = ph; applyFilter(); }
+  function clearFilter()      { activePhase = null; noiseVisible = true; applyFilter(); }
+</script>
+
+{# ════════════════════════════════════════════════════════════════════════════
+   TAB: TRAINER DASHBOARD
+   ════════════════════════════════════════════════════════════════════════════ #}
+{% elif tab == "dashboard" %}
+
+<div class="row g-3 mb-4">
+  <div class="col-12 col-md-4">
+    <div class="card text-center p-3">
+      <div style="font-size:2rem; font-weight:700; color:#56d364;">{{ fired_count }}</div>
+      <div class="text-secondary small">rules fired</div>
+    </div>
+  </div>
+  <div class="col-12 col-md-4">
+    <div class="card text-center p-3">
+      <div style="font-size:2rem; font-weight:700;">{{ rule_results|length }}</div>
+      <div class="text-secondary small">total rules</div>
+    </div>
+  </div>
+  <div class="col-12 col-md-4">
+    <div class="card text-center p-3">
+      <div style="font-size:2rem; font-weight:700; color:#79c0ff;">
+        {{ "%.0f"|format(fired_count / rule_results|length * 100) }}%
+      </div>
+      <div class="text-secondary small">coverage</div>
+    </div>
+  </div>
+</div>
+
+<div class="card mb-4">
+  <div class="card-header text-secondary small">Detection Rule Results</div>
+  <table class="table table-sm align-middle mb-0" style="font-size:.82rem;">
+    <thead class="text-secondary" style="border-bottom:1px solid #30363d;">
+      <tr>
+        <th>Status</th><th>Rule ID</th><th>Name</th><th>Technique</th><th>Matches</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for r in rule_results %}
+    <tr>
+      <td>
+        {% if r.fired %}
+        <span class="rule-fired fw-bold">FIRED</span>
+        {% else %}
+        <span class="rule-miss">NOT</span>
+        {% endif %}
+      </td>
+      <td class="font-monospace text-secondary">{{ r.rule.id }}</td>
+      <td>{{ r.rule.name }}</td>
+      <td><span class="badge badge-technique" style="background:#1a2a4a; color:#79c0ff; border:1px solid #1f4e8c;">{{ r.rule.technique }}</span></td>
+      <td class="text-secondary">{{ r.matches|length }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="card">
+  <div class="card-header text-secondary small">Phase Summary</div>
+  <table class="table table-sm align-middle mb-0" style="font-size:.82rem;">
+    <thead class="text-secondary" style="border-bottom:1px solid #30363d;">
+      <tr><th>Phase</th><th>Name</th><th>Events</th><th>Techniques</th></tr>
+    </thead>
+    <tbody>
+    {% for ph in phase_summary %}
+    <tr>
+      <td><span class="phase-dot" style="background:{{ ph.colour }};"></span>{{ ph.id }}</td>
+      <td>{{ ph.name }}</td>
+      <td class="font-monospace">{{ ph.count }}</td>
+      <td>
+        {% for tid in ph.mitre %}
+        <span class="badge badge-technique" style="background:#1a2a4a; color:#79c0ff; border:1px solid #1f4e8c;">{{ tid }}</span>
+        {% endfor %}
+      </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{# ════════════════════════════════════════════════════════════════════════════
+   TAB: OVERVIEW
+   ════════════════════════════════════════════════════════════════════════════ #}
+{% elif tab == "overview" %}
+
+<div class="row g-3">
+  <div class="col-12 col-lg-5">
+    <div class="card mb-3">
+      <div class="card-header text-secondary small">Infrastructure</div>
+      <div class="card-body p-0">
+        <table class="table table-sm mb-0" style="font-size:.82rem;">
+          <thead class="text-secondary"><tr><th>Host</th><th>IP</th><th>OS</th></tr></thead>
+          <tbody>
+          {% for name, host in spec.infrastructure.hosts.items() %}
+          <tr>
+            <td class="font-monospace">{{ name }}</td>
+            <td class="font-monospace text-secondary">{{ host.ip }}</td>
+            <td class="text-secondary small">{{ host.os }}</td>
+          </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header text-secondary small">MITRE ATT&CK Techniques</div>
+      <div class="card-body">
+        {% for tid in all_tids %}
+        <div class="d-flex justify-content-between align-items-center mb-1">
+          <span class="badge badge-technique" style="background:#1a2a4a; color:#79c0ff; border:1px solid #1f4e8c; min-width:90px; text-align:center;">{{ tid }}</span>
+          <span class="text-secondary small ms-2">{{ TECHNIQUE_NAMES.get(tid, tid) }}</span>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 col-lg-7">
+    <div class="card">
+      <div class="card-header text-secondary small">Attack Phases</div>
+      <div class="card-body p-0">
+        <table class="table table-sm mb-0" style="font-size:.82rem;">
+          <thead class="text-secondary"><tr><th>#</th><th>Offset</th><th>Name</th><th>Events</th><th>Techniques</th></tr></thead>
+          <tbody>
+          {% for ph in phase_summary %}
+          <tr>
+            <td><span class="phase-dot" style="background:{{ ph.colour }};"></span>{{ ph.id }}</td>
+            <td class="font-monospace text-secondary">
+              T+{{ spec.attack.phases[loop.index0].offset_minutes }}m
+            </td>
+            <td>{{ ph.name }}</td>
+            <td class="font-monospace text-secondary">{{ ph.count }}</td>
+            <td>
+              {% for tid in ph.mitre[:3] %}
+              <span class="badge badge-technique" style="background:#1a2a4a; color:#79c0ff; border:1px solid #1f4e8c;">{{ tid }}</span>
+              {% endfor %}
+              {% if ph.mitre|length > 3 %}
+              <span class="text-secondary small">+{{ ph.mitre|length - 3 }}</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endif %}
+
+{% endblock %}

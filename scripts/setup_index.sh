@@ -78,7 +78,8 @@ curl -sf -X POST "$KIBANA/api/data_views/data_view" \
     "data_view": {
       "title": "winlogbeat-artiforge-*",
       "name":  "ArtiForge Labs",
-      "timeFieldName": "@timestamp"
+      "timeFieldName": "@timestamp",
+      "sourceFilters": [{ "value": "artiforge" }]
     }
   }' | python3 -c "
 import sys, json

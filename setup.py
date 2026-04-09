@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="artiforge",
-    version="0.1.0",
+    version="0.5.0",
     author="D3vn0mi",
     author_email="",
     description="YAML-driven Windows event artifact generator for cybersecurity training labs.",
@@ -22,12 +22,18 @@ setup(
     ],
     packages=find_packages(),
     include_package_data=True,
-    package_data={"artiforge": ["labs/**/*.yaml", "labs/**/*.xml", "labs/**/*.md", "labs/**/*.json"]},
+    package_data={"artiforge": [
+        "labs/**/*.yaml", "labs/**/*.xml", "labs/**/*.md", "labs/**/*.json",
+        "web/templates/*.html",
+    ]},
     install_requires=[
         "click>=8.1",
         "pyyaml>=6.0",
         "pydantic>=2.0",
     ],
+    extras_require={
+        "web": ["flask>=2.3"],
+    },
     entry_points={
         "console_scripts": [
             "artiforge=artiforge.cli:main",

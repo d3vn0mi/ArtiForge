@@ -58,6 +58,17 @@ class Infrastructure(BaseModel):
         return data
 
 
+# ── Noise specification ───────────────────────────────────────────────────────
+
+class NoiseSpec(BaseModel):
+    """Configures background noise events injected into the timeline."""
+    host: str
+    spread_minutes: int = Field(default=60, ge=1)
+    logon_pairs: int = Field(default=0, ge=0)
+    process_spawns: int = Field(default=0, ge=0)
+    dns_queries: int = Field(default=0, ge=0)
+
+
 # ── Attack specification ───────────────────────────────────────────────────────
 
 class EventSpec(BaseModel):
@@ -71,6 +82,8 @@ class EventSpec(BaseModel):
     fields: dict[str, Any] = Field(default_factory=dict)
     repeat: int = Field(default=1, ge=1)
     repeat_gap_seconds: int = Field(default=30, ge=0)
+    jitter_seconds: int = Field(default=0, ge=0)        # ±N second timestamp jitter
+    repeat_jitter_seconds: int = Field(default=0, ge=0)  # ±N jitter between repeats
 
 
 class FileArtifactSpec(BaseModel):
@@ -97,6 +110,7 @@ class AttackSpec(BaseModel):
     base_time: datetime
     malicious_account: str = "svc_backup_admin"
     phases: list[Phase] = Field(default_factory=list)
+    noise: list[NoiseSpec] = Field(default_factory=list)
 
 
 class LabMeta(BaseModel):
@@ -104,6 +118,7 @@ class LabMeta(BaseModel):
     name: str
     description: str = ""
     mitre_version: str = "v14"
+    lab_schema_version: str = "1"
 
 
 class LabSpec(BaseModel):
@@ -130,6 +145,7 @@ class GeneratedEvent(BaseModel):
     event_data: dict[str, str] = Field(default_factory=dict)
     phase_id: int = 0
     phase_name: str = ""
+    mitre_techniques: list[str] = Field(default_factory=list)  # ATT&CK technique IDs
 
     @property
     def event_id(self) -> int:
@@ -154,3 +170,4 @@ class ArtifactBundle(BaseModel):
 
     class Config:
         arbitrary_types_allowed = True
+
