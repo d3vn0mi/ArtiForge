@@ -1,5 +1,9 @@
 FROM python:3.12-slim
 
+# Bake the git commit into the image so artiforge.sh can detect stale images
+ARG GIT_COMMIT=unknown
+LABEL git-commit=$GIT_COMMIT
+
 WORKDIR /app
 
 # Install Python dependencies first (layer cached unless requirements change)

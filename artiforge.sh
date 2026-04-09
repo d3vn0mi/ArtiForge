@@ -19,6 +19,9 @@
 #   ./artiforge.sh generate --lab-path ./mylab/lab.yaml --dry-run
 #   ./artiforge.sh new-lab --id my-scenario --output /work
 #   ./artiforge.sh validate --lab uc3
+#   ./artiforge.sh navigator --lab uc3
+#   ./artiforge.sh check --lab uc3
+#   ./artiforge.sh serve                  # web UI on http://localhost:5000
 #
 # Environment variables
 # ---------------------
@@ -29,16 +32,26 @@ set -euo pipefail
 
 IMAGE="${ARTIFORGE_IMAGE:-artiforge:latest}"
 
-# Auto-build if the image doesn't exist yet (or the user hasn't opted out)
+# Auto-rebuild when the git commit has changed since the image was built.
+# Set ARTIFORGE_NO_BUILD=1 to skip this check entirely.
 if [[ "${ARTIFORGE_NO_BUILD:-0}" != "1" ]]; then
-    if ! docker image inspect "$IMAGE" > /dev/null 2>&1; then
-        echo "[artiforge.sh] Image '$IMAGE' not found — building now..." >&2
-        docker build -t "$IMAGE" "$(dirname "$0")"
+    current_commit=$(git rev-parse HEAD 2>/dev/null || echo "unknown")
+    image_commit=$(docker image inspect "$IMAGE" --format '{{index .Config.Labels "git-commit"}}' 2>/dev/null || echo "")
+    if [[ "$current_commit" != "$image_commit" ]]; then
+        echo "[artiforge.sh] Rebuilding image (code changed since last build)..." >&2
+        docker build --build-arg GIT_COMMIT="$current_commit" -t "$IMAGE" "$(dirname "$0")"
     fi
+fi
+
+# Publish port 5000 automatically when the first argument is "serve"
+PORT_FLAG=()
+if [[ "${1:-}" == "serve" ]]; then
+    PORT_FLAG=(-p 5000:5000)
 fi
 
 exec docker run --rm \
     -v "$(pwd):/work" \
     --user "$(id -u):$(id -g)" \
+    "${PORT_FLAG[@]}" \
     "$IMAGE" \
     "$@"
