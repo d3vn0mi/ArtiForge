@@ -161,6 +161,15 @@ def test_layer_comment_includes_phase_name(uc3_layer, uc3_spec):
         )
 
 
+def test_uc3_layer_attack_version_is_18():
+    """UC3 Navigator layer should reflect ATT&CK v18."""
+    spec = engine.load_lab("uc3")
+    layer = build_layer(spec)
+    assert layer["versions"]["attack"] == "18"
+    assert layer["versions"]["navigator"] == "5.1"
+    assert layer["versions"]["layer"] == "4.5"
+
+
 def test_layer_is_json_serialisable(uc3_layer):
     dumped = json.dumps(uc3_layer)
     reloaded = json.loads(dumped)
