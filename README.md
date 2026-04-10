@@ -11,7 +11,7 @@
 
 **YAML-driven Windows event artifact generator for cybersecurity training labs**
 
-[![Version](https://img.shields.io/badge/version-0.1.0-blue?style=flat-square)](ROADMAP.md)
+[![Version](https://img.shields.io/badge/version-0.5.0-blue?style=flat-square)](ROADMAP.md)
 [![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue?style=flat-square)](setup.py)
 [![Docker](https://img.shields.io/badge/docker-ready-2496ED?style=flat-square)](Dockerfile)
@@ -23,7 +23,7 @@
 
 ArtiForge generates realistic Windows event logs and supporting file artifacts from a declarative YAML specification. Drop the output into Elasticsearch/Kibana or open it directly in Windows Event Viewer — no manual crafting required.
 
-**Channels:** Security · System · Sysmon · PowerShell · Application  
+**Channels:** Security · System · Sysmon · PowerShell · Application · WMI  
 **Output:** Windows XML · Elasticsearch NDJSON (ECS-mapped)  
 **Artifacts:** LNK · XSL · INF · Scheduled Task XML · Binary stubs
 
@@ -64,6 +64,12 @@ artiforge generate --lab uc3
 | `info --lab <id>` | Show phases, event counts, and infrastructure |
 | `generate --lab <id>` | Generate all artifacts for a lab |
 | `validate --lab <id>` | Schema check + EID coverage scan, no files written |
+| `check --lab <id>` | Run detection rules and report which fire (coverage %) |
+| `diff --lab <a> --other <b>` | Compare two lab bundles: event counts, phases, EIDs |
+| `graph --lab <id>` | Show ProcessGuid / LogonId correlation chains |
+| `navigator --lab <id>` | Export MITRE ATT&CK Navigator layer JSON |
+| `coverage` | Print a techniques x labs coverage matrix |
+| `serve` | Launch the web UI (requires `pip install artiforge[web]`) |
 | `new-lab --id <id>` | Scaffold a new lab directory from the built-in template |
 | `schema` | Print or save the JSON Schema for IDE autocompletion |
 
@@ -78,6 +84,12 @@ artiforge generate --lab uc3
 
 # Override the base timestamp
 ./artiforge.sh generate --lab uc3 --base-time "2026-06-01T08:30:00Z"
+
+# Deterministic output (same seed = identical output each run)
+./artiforge.sh generate --lab uc3 --seed 42
+
+# Add organic timestamp jitter (+/- N seconds per event)
+./artiforge.sh generate --lab uc3 --jitter 5
 
 # Use a lab YAML from outside the built-in directory
 ./artiforge.sh generate --lab-path /path/to/lab.yaml
@@ -112,9 +124,10 @@ artifacts/
 
 ## Labs
 
-| ID | Name | Techniques | Phases |
-|----|------|------------|--------|
-| `uc3` | Egg-Cellent Resume | LOLBAS · Cloudflared C2 · Veeam CVE-2023-27532 | 5 |
+| ID | Name | Techniques | Phases | Noise |
+|----|------|------------|--------|-------|
+| `uc3` | Egg-Cellent Resume | LOLBAS · Cloudflared C2 · Veeam CVE-2023-27532 | 5 | - |
+| `uc3n` | Egg-Cellent Resume (Noisy) | Same attack as UC3 | 5 | ~143 events |
 
 More labs planned — see [ROADMAP.md](ROADMAP.md).
 
@@ -122,11 +135,12 @@ More labs planned — see [ROADMAP.md](ROADMAP.md).
 
 | Channel | Log | EIDs |
 |---------|-----|------|
-| `Security` | Security | 4624 4625 4634 4648 4672 4688 4698 4720 4732 4776 |
+| `Security` | Security | 4624 4625 4634 4648 4656 4657 4663 4670 4672 4688 4698 4720 4723 4724 4725 4726 4732 4768 4769 4771 4776 4946 4947 5156 5157 |
 | `System` | System | 7036 7045 |
-| `Sysmon` | Microsoft-Windows-Sysmon/Operational | 1 3 11 13 22 |
+| `Sysmon` | Microsoft-Windows-Sysmon/Operational | 1 3 5 7 8 10 11 12 13 14 17 18 22 23 25 |
 | `Application` | Application | 1 |
 | `PowerShell` | Microsoft-Windows-PowerShell/Operational | 4103 4104 |
+| `WMI` | Microsoft-Windows-WMI-Activity/Operational | 5857 5860 5861 |
 
 ### UC3 Event Coverage
 
@@ -151,7 +165,7 @@ More labs planned — see [ROADMAP.md](ROADMAP.md).
 ./artiforge.sh new-lab --id uc4-kerberoast --name "Kerberoasting Lab" --output /work
 
 # Edit — every field that needs changing is marked FIXME
-# (full guide: artiforge/labs/_template/DEVELOPMENT.md)
+# (full guide: docs/LAB_AUTHORING_GUIDE.md)
 
 # Validate schema and EID support
 ./artiforge.sh validate --lab-path /path/to/uc4-kerberoast/lab.yaml
@@ -159,6 +173,8 @@ More labs planned — see [ROADMAP.md](ROADMAP.md).
 # Generate
 ./artiforge.sh generate --lab-path /path/to/uc4-kerberoast/lab.yaml
 ```
+
+For the complete lab authoring reference — YAML fields, event patterns, timing model, and troubleshooting — see **[docs/LAB_AUTHORING_GUIDE.md](docs/LAB_AUTHORING_GUIDE.md)**.
 
 **VS Code:** install the Red Hat YAML extension — `.vscode/settings.json` wires the JSON Schema automatically so every field autocompletes with inline docs.
 
@@ -168,13 +184,16 @@ More labs planned — see [ROADMAP.md](ROADMAP.md).
 
 See [ROADMAP.md](ROADMAP.md) for the full plan.
 
-| Milestone | Focus |
-|-----------|-------|
-| **v0.2** | Event coverage — Kerberos, object access, Sysmon 5/7/8/10, WMI |
-| **v0.3** | Realism — background noise, timestamp jitter, multi-user sessions |
-| **v0.4** | Lab tooling — detection checks, strict validation, schema versioning |
-| **v1.0** | Lab ecosystem — 10+ scenarios, ATT&CK Navigator, web UI, PyPI |
-| **v1.1** | Export integrations — Splunk HEC, Sentinel, QRadar, CEF |
+| Milestone | Focus | Status |
+|-----------|-------|--------|
+| **v0.1** | Foundation — YAML labs, CLI, Docker, 28 EIDs | Done |
+| **v0.2** | Event coverage — Kerberos, object access, Sysmon 5-25, WMI | Done |
+| **v0.3** | Realism — background noise, `--seed`, `--jitter`, beacon jitter | Done |
+| **v0.4** | Lab tooling — `check`, `diff`, `graph`, `validate --strict` | Done |
+| **v0.5** | MITRE ATT&CK integration, Navigator layers, web UI | Done |
+| **v0.6** | Kibana realism — ECS `labels.*` namespace, `--no-meta` flag | Next |
+| **v0.9** | Distribution — PyPI, CI matrix, GHCR image, signed releases | Planned |
+| **v1.0** | Scenario library — 7 new labs (Kerberoasting, ransomware, etc.) | Planned |
 
 ---
 

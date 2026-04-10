@@ -63,6 +63,7 @@ Expected output:
 ID           NAME                           PHASES  EVENTS   DESCRIPTION
 ────────────────────────────────────────────────────────────────────────────────
   uc3        Egg-Cellent Resume                  5      40   LOLBAS execution chain...
+  uc3n       Egg-Cellent Resume (Noisy)          5      40   Same attack as UC3 with...
 ```
 
 ---
