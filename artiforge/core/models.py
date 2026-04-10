@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 # ── Infrastructure ────────────────────────────────────────────────────────────
@@ -168,6 +168,5 @@ class ArtifactBundle(BaseModel):
     events: list[GeneratedEvent] = Field(default_factory=list)
     files: list[GeneratedFile] = Field(default_factory=list)
 
-    class Config:
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 

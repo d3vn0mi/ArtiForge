@@ -20,14 +20,18 @@ _CHANNEL_PATH = {
     "System":      "System",
     "Sysmon":      "Microsoft-Windows-Sysmon/Operational",
     "Application": "Application",
+    "PowerShell":  "Microsoft-Windows-PowerShell/Operational",
+    "WMI":         "Microsoft-Windows-WMI-Activity/Operational",
 }
 
 # Channel → Keywords value
 _KEYWORDS = {
-    "Security": "0x8020000000000000",
-    "System":   "0x8000000000000000",
-    "Sysmon":   "0x8000000000000000",
-    "Application": "0x80000000000000",
+    "Security":    "0x8020000000000000",
+    "System":      "0x8000000000000000",
+    "Sysmon":      "0x8000000000000000",
+    "Application": "0x0080000000000000",
+    "PowerShell":  "0x0000000000000000",
+    "WMI":         "0x0000000000000000",
 }
 
 

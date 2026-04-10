@@ -135,6 +135,7 @@ def run(
             stacklevel=2,
         )
 
+    prev_state = _random.getstate()
     if seed is not None:
         _random.seed(seed)
 
@@ -241,6 +242,9 @@ def run(
             )
             bundle.events.extend(noise_events)
             record_id += len(noise_events)
+
+    if seed is not None:
+        _random.setstate(prev_state)
 
     return bundle
 

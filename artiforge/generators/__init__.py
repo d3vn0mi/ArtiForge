@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
-from artiforge.core.models import FileArtifactSpec, GeneratedFile, Host, Phase, User
+from artiforge.core.models import FileArtifactSpec, GeneratedFile, Host, LabSpec, Phase, User
 from artiforge.generators import application, files, powershell, security, sysmon, system, wmi
 
 _CHANNEL_MAP = {
@@ -23,8 +24,8 @@ def dispatch_event(
     fields: dict,
     host: Host,
     user: User | None,
-    spec: Any,
-    timestamp: Any,
+    spec: LabSpec,
+    timestamp: datetime,
 ) -> dict:
     mod = _CHANNEL_MAP.get(channel)
     if mod is None:

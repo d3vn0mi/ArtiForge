@@ -20,7 +20,6 @@ EID 25 — ProcessTampering
 from __future__ import annotations
 
 import random
-import uuid
 from typing import Any
 
 from artiforge.core.models import Host, User
@@ -42,15 +41,6 @@ def _guid() -> str:
     ]
     return "{" + "-".join(parts) + "}"
 
-
-def _stable_guid(seed: str) -> str:
-    """Deterministic GUID derived from a seed string (uuid5 / DNS namespace).
-
-    Use this when multiple events must share the same ProcessGuid — e.g. a
-    Sysmon 1 process-create and its subsequent Sysmon 3 network events.
-    Pass the same seed string to all correlated events.
-    """
-    return "{" + str(uuid.uuid5(uuid.NAMESPACE_DNS, seed)).upper() + "}"
 
 
 # ── EID 1 — Process Create ────────────────────────────────────────────────────
@@ -342,13 +332,11 @@ def eid_25(fields: dict, host: Host, user: User | None, timestamp: Any, **_) -> 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _fake_md5() -> str:
-    import secrets
-    return secrets.token_hex(16).upper()
+    return ''.join(f'{random.getrandbits(8):02X}' for _ in range(16))
 
 
 def _fake_sha256() -> str:
-    import secrets
-    return secrets.token_hex(32).upper()
+    return ''.join(f'{random.getrandbits(8):02X}' for _ in range(32))
 
 
 # ── Dispatcher ────────────────────────────────────────────────────────────────

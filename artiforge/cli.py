@@ -30,7 +30,8 @@ def _version() -> str:
         from importlib.metadata import version
         return version("artiforge")
     except Exception:
-        return "0.1.0"
+        from artiforge import __version__
+        return __version__
 
 
 @click.group()
@@ -46,8 +47,6 @@ def main():
     Built by D3vn0mi  |  https://github.com/D3vn0mi/ArtiForge
     """
 
-
-# ── list-labs ─────────────────────────────────────────────────────────────────
 
 # ── validate ──────────────────────────────────────────────────────────────────
 

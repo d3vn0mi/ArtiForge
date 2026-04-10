@@ -10,7 +10,6 @@ excluded from scoring but appear in Kibana alongside attack events.
 from __future__ import annotations
 
 import random
-import secrets
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING
 
@@ -133,11 +132,11 @@ def _guid() -> str:
 
 
 def _fake_md5() -> str:
-    return secrets.token_hex(16).upper()
+    return ''.join(f'{random.getrandbits(8):02X}' for _ in range(16))
 
 
 def _fake_sha256() -> str:
-    return secrets.token_hex(32).upper()
+    return ''.join(f'{random.getrandbits(8):02X}' for _ in range(32))
 
 
 def _logon_id() -> str:
