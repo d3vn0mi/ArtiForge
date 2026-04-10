@@ -2,7 +2,7 @@
 # ArtiForge — Lab Specification
 # UC3: Egg-Cellent Resume
 # LOLBAS + Cloudflared Tunneling + Veeam Pivot
-# Anchor: THE DFIR REPORT · CVE-2023-27532 · MITRE ATT&CK v14
+# Anchor: THE DFIR REPORT · CVE-2023-27532 · MITRE ATT&CK v18
 # ============================================================
 
 lab:
@@ -14,7 +14,7 @@ lab:
     pivot outcome (new local admin account), Cloudflared tunnel registered as a
     masqueraded Windows service (egress blocked), and RDP lateral movement to a
     file-staging workstation.
-  mitre_version: "v14"
+  mitre_version: "v18"
 
 # ── Infrastructure ────────────────────────────────────────────────────────────
 infrastructure:

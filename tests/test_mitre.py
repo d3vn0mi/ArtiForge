@@ -19,6 +19,16 @@ def uc3_layer(uc3_spec):
 
 # ── Technique names ───────────────────────────────────────────────────────────
 
+def test_all_labs_use_v18():
+    """All built-in labs should declare mitre_version v18."""
+    from artiforge.core import engine
+    for lab_id in ("uc3", "uc3n"):
+        spec = engine.load_lab(lab_id)
+        assert spec.lab.mitre_version == "v18", (
+            f"Lab {lab_id} still on {spec.lab.mitre_version}"
+        )
+
+
 def test_default_mitre_version_is_v18():
     """LabMeta default should reflect the current ATT&CK version."""
     from artiforge.core.models import LabMeta
