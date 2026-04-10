@@ -26,6 +26,25 @@ def test_default_mitre_version_is_v18():
     assert meta.mitre_version == "v18"
 
 
+V18_NEW_TECHNIQUES = [
+    "T1059.010",   # AutoHotkey & AutoIT (v15)
+    "T1218.015",   # Electron Applications (v15)
+    "T1027.013",   # Encrypted/Encoded File (v15)
+    "T1098.007",   # Additional Local or Domain Groups (v16)
+    "T1204.004",   # Malicious Copy and Paste (v17)
+    "T1036.011",   # Overwrite Process Arguments (v17)
+    "T1678",       # Delay Execution (v18)
+    "T1204.005",   # Malicious Library (v18)
+]
+
+
+def test_v18_techniques_present_in_dict():
+    """Technique names added in ATT&CK v15-v18 should be in the mapping."""
+    for tid in V18_NEW_TECHNIQUES:
+        assert tid in TECHNIQUE_NAMES, f"Missing v15-v18 technique: {tid}"
+        assert isinstance(TECHNIQUE_NAMES[tid], str) and TECHNIQUE_NAMES[tid]
+
+
 def test_technique_names_nonempty():
     assert len(TECHNIQUE_NAMES) > 0
 
