@@ -22,7 +22,7 @@ lab:
   description: >
     FIXME: one to three sentences describing the attack scenario,
     what technique it demonstrates, and what the trainee must find.
-  mitre_version: "v14"
+  mitre_version: "v18"
 
 # ── Infrastructure ────────────────────────────────────────────────────────────
 # Define every host that appears in the scenario.
