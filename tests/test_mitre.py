@@ -71,6 +71,11 @@ def test_layer_versions_present(uc3_layer):
     assert "layer" in v
 
 
+def test_layer_navigator_version_is_current(uc3_layer):
+    """Navigator version in layer output should be 5.1 (compatible with ATT&CK v18)."""
+    assert uc3_layer["versions"]["navigator"] == "5.1"
+
+
 def test_layer_techniques_nonempty(uc3_layer):
     assert len(uc3_layer["techniques"]) > 0
 
