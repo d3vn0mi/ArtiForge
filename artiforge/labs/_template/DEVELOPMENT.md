@@ -65,7 +65,7 @@ lab:
   description: >
     One to three sentences: what attack does this simulate, what technique
     it demonstrates, and what the trainee must find.
-  mitre_version: "v14"
+  mitre_version: "v18"
 ```
 
 ### `infrastructure` Section

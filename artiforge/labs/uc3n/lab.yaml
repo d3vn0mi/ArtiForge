@@ -25,7 +25,7 @@ lab:
     realistic background noise across all four hosts. Trainees must distinguish
     attacker activity from normal workday traffic before they can answer the
     hunt questions.
-  mitre_version: "v14"
+  mitre_version: "v18"
 
 # ── Infrastructure (identical to UC3) ─────────────────────────────────────────
 infrastructure:

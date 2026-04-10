@@ -13,15 +13,19 @@ TECHNIQUE_NAMES: dict[str, str] = {
     "T1566.002": "Phishing: Spearphishing Link",
     "T1204":     "User Execution",
     "T1204.002": "User Execution: Malicious File",
+    "T1204.004": "User Execution: Malicious Copy and Paste",
+    "T1204.005": "User Execution: Malicious Library",
 
     # ── Execution ─────────────────────────────────────────────────────────────
     "T1059":     "Command and Scripting Interpreter",
     "T1059.001": "Command and Scripting Interpreter: PowerShell",
     "T1059.003": "Command and Scripting Interpreter: Windows Command Shell",
+    "T1059.010": "Command and Scripting Interpreter: AutoHotkey & AutoIT",
     "T1047":     "Windows Management Instrumentation",
     "T1218":     "System Binary Proxy Execution",
     "T1218.010": "System Binary Proxy Execution: Regsvr32",
     "T1218.011": "System Binary Proxy Execution: Rundll32",
+    "T1218.015": "System Binary Proxy Execution: Electron Applications",
 
     # ── Persistence ───────────────────────────────────────────────────────────
     "T1053":     "Scheduled Task/Job",
@@ -39,8 +43,10 @@ TECHNIQUE_NAMES: dict[str, str] = {
 
     # ── Defense Evasion ───────────────────────────────────────────────────────
     "T1027":     "Obfuscated Files or Information",
+    "T1027.013": "Obfuscated Files or Information: Encrypted/Encoded File",
     "T1036":     "Masquerading",
     "T1036.004": "Masquerading: Masquerade Task or Service",
+    "T1036.011": "Masquerading: Overwrite Process Arguments",
     "T1055":     "Process Injection",
     "T1055.003": "Process Injection: Thread Execution Hijacking",
     "T1070":     "Indicator Removal",
@@ -82,7 +88,9 @@ TECHNIQUE_NAMES: dict[str, str] = {
     "T1136":     "Create Account",
     "T1136.001": "Create Account: Local Account",
     "T1098":     "Account Manipulation",
+    "T1098.007": "Account Manipulation: Additional Local or Domain Groups",
 
     # ── Other ─────────────────────────────────────────────────────────────────
     "T1105":     "Ingress Tool Transfer",
+    "T1678":     "Delay Execution",
 }

@@ -76,7 +76,7 @@ def build_layer(spec: LabSpec) -> dict:
 
     return {
         "name":        spec.lab.name,
-        "versions":    {"attack": spec.lab.mitre_version.lstrip("v"), "navigator": "4.9", "layer": "4.5"},
+        "versions":    {"attack": spec.lab.mitre_version.lstrip("v"), "navigator": "5.1", "layer": "4.5"},
         "domain":      "enterprise-attack",
         "description": f"ArtiForge lab: {spec.lab.name}. {spec.lab.description}".strip(),
         "filters":     {"platforms": ["Windows"]},

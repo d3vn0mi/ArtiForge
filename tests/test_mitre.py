@@ -19,6 +19,42 @@ def uc3_layer(uc3_spec):
 
 # ── Technique names ───────────────────────────────────────────────────────────
 
+def test_all_labs_use_v18():
+    """All built-in labs should declare mitre_version v18."""
+    from artiforge.core import engine
+    for lab_id in ("uc3", "uc3n"):
+        spec = engine.load_lab(lab_id)
+        assert spec.lab.mitre_version == "v18", (
+            f"Lab {lab_id} still on {spec.lab.mitre_version}"
+        )
+
+
+def test_default_mitre_version_is_v18():
+    """LabMeta default should reflect the current ATT&CK version."""
+    from artiforge.core.models import LabMeta
+    meta = LabMeta(id="test", name="Test")
+    assert meta.mitre_version == "v18"
+
+
+V18_NEW_TECHNIQUES = [
+    "T1059.010",   # AutoHotkey & AutoIT (v15)
+    "T1218.015",   # Electron Applications (v15)
+    "T1027.013",   # Encrypted/Encoded File (v15)
+    "T1098.007",   # Additional Local or Domain Groups (v16)
+    "T1204.004",   # Malicious Copy and Paste (v17)
+    "T1036.011",   # Overwrite Process Arguments (v17)
+    "T1678",       # Delay Execution (v18)
+    "T1204.005",   # Malicious Library (v18)
+]
+
+
+def test_v18_techniques_present_in_dict():
+    """Technique names added in ATT&CK v15-v18 should be in the mapping."""
+    for tid in V18_NEW_TECHNIQUES:
+        assert tid in TECHNIQUE_NAMES, f"Missing v15-v18 technique: {tid}"
+        assert isinstance(TECHNIQUE_NAMES[tid], str) and TECHNIQUE_NAMES[tid]
+
+
 def test_technique_names_nonempty():
     assert len(TECHNIQUE_NAMES) > 0
 
@@ -62,6 +98,11 @@ def test_layer_versions_present(uc3_layer):
     assert "attack" in v
     assert "navigator" in v
     assert "layer" in v
+
+
+def test_layer_navigator_version_is_current(uc3_layer):
+    """Navigator version in layer output should be 5.1 (compatible with ATT&CK v18)."""
+    assert uc3_layer["versions"]["navigator"] == "5.1"
 
 
 def test_layer_techniques_nonempty(uc3_layer):
@@ -118,6 +159,15 @@ def test_layer_comment_includes_phase_name(uc3_layer, uc3_spec):
         assert any(name in tech["comment"] for name in phase_names), (
             f"Technique {tech['techniqueID']} comment missing phase name"
         )
+
+
+def test_uc3_layer_attack_version_is_18():
+    """UC3 Navigator layer should reflect ATT&CK v18."""
+    spec = engine.load_lab("uc3")
+    layer = build_layer(spec)
+    assert layer["versions"]["attack"] == "18"
+    assert layer["versions"]["navigator"] == "5.1"
+    assert layer["versions"]["layer"] == "4.5"
 
 
 def test_layer_is_json_serialisable(uc3_layer):
