@@ -19,6 +19,13 @@ def uc3_layer(uc3_spec):
 
 # ── Technique names ───────────────────────────────────────────────────────────
 
+def test_default_mitre_version_is_v18():
+    """LabMeta default should reflect the current ATT&CK version."""
+    from artiforge.core.models import LabMeta
+    meta = LabMeta(id="test", name="Test")
+    assert meta.mitre_version == "v18"
+
+
 def test_technique_names_nonempty():
     assert len(TECHNIQUE_NAMES) > 0
 

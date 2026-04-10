@@ -244,7 +244,7 @@
           "type": "string"
         },
         "mitre_version": {
-          "default": "v14",
+          "default": "v18",
           "title": "Mitre Version",
           "type": "string"
         }
