@@ -31,8 +31,9 @@ A step-by-step guide to creating your own attack simulation lab, with a comprehe
 6. [Timing Model](#timing-model)
 7. [YAML Anchors for ProcessGuid Correlation](#yaml-anchors-for-processguid-correlation)
 8. [Common Event Patterns](#common-event-patterns)
-9. [CLI Commands](#cli-commands)
-10. [Troubleshooting](#troubleshooting)
+9. [Adding a New EID](#adding-a-new-eid)
+10. [CLI Commands](#cli-commands)
+11. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -968,6 +969,49 @@ python3 -c "import uuid; print('{' + str(uuid.uuid4()).upper() + '}')"
     Details: 'C:\ProgramData\update.exe'
     User: 'NT AUTHORITY\SYSTEM'
 ```
+
+---
+
+## Adding a New EID
+
+If your scenario needs an EID not in the [supported list](#supported-channels-and-eids), you can add a generator for it:
+
+1. Identify the channel (`Security`, `System`, `Sysmon`, `Application`, `PowerShell`, `WMI`)
+2. Open the matching generator file: `artiforge/generators/<channel>.py`
+3. Add a function `eid_NNNN(fields, host, user, spec, timestamp)` following the pattern of existing functions
+4. Register it in the `_GENERATORS` dict at the bottom of the file
+5. Add the EID to `_SUPPORTED_EIDS` in `artiforge/cli.py`
+
+**Example — adding Security EID 4625 (failed logon):**
+
+```python
+def eid_4625(fields: dict, host: Host, user: User | None,
+             timestamp: Any, **_) -> dict:
+    return {
+        "SubjectUserName": "SYSTEM",
+        "SubjectDomainName": "NT AUTHORITY",
+        "TargetUserName": fields.get("TargetUserName",
+            user.username if user else "-"),
+        "TargetDomainName": fields.get("TargetDomainName",
+            user.domain if user else "-"),
+        "FailureReason": fields.get("FailureReason", "%%2313"),
+        "Status": fields.get("Status", "0xc000006d"),
+        "SubStatus": fields.get("SubStatus", "0xc0000064"),
+        "LogonType": fields.get("LogonType", "3"),
+    }
+
+# Add to the dispatcher at the bottom of the file:
+_GENERATORS[4625] = eid_4625
+```
+
+Each generator function receives:
+- `fields` — the `fields:` dict from the YAML (your overrides)
+- `host` — the resolved `Host` model
+- `user` — the resolved `User` model (or `None`)
+- `timestamp` — the resolved `datetime` for this event
+- `spec` — the full `LabSpec` (rarely needed)
+
+Return a `dict[str, str]` of EventData field names to values. Use `fields.get("Key", default)` so YAML values override your defaults.
 
 ---
 
