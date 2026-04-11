@@ -353,6 +353,20 @@ def generate(lab: str | None, lab_path: str | None, output: str, fmt: str,
     # Use spec lab id as the directory name (works whether --lab or --lab-path was used)
     lab_id = spec.lab.id
 
+    # Warn when --no-meta is incompatible with noise-based labs: the labels.*
+    # block is the only way to distinguish noise from attack events downstream,
+    # so the noise-filter KQL in the trainee brief will return zero results.
+    if no_meta and spec.attack.noise:
+        click.echo(
+            "  [warn] --no-meta strips labels.phase_name, but this lab has a "
+            "noise: section.\n"
+            "         KQL queries like `NOT labels.phase_name : \"noise\"` "
+            "will not work on the output.\n"
+            "         Use this mode only when phase grading is done "
+            "out-of-band.",
+            err=True,
+        )
+
     # Run generation
     click.echo(f"\n[ArtiForge] Generating artifacts for lab: {spec.lab.name}")
     try:
