@@ -225,7 +225,7 @@ def test_ecs_threat_field_present_for_attack_events():
 
     # Even-indexed lines are action lines; odd-indexed are documents
     docs = [_json.loads(lines[i]) for i in range(1, len(lines), 2)]
-    attack_docs = [d for d in docs if d.get("artiforge", {}).get("phase_id", 0) != 0]
+    attack_docs = [d for d in docs if d.get("labels", {}).get("phase_id", "0") != "0"]
 
     assert len(attack_docs) > 0
     for doc in attack_docs:
@@ -247,7 +247,7 @@ def test_ecs_threat_field_absent_for_noise_events():
         lines = ndjson_path.read_text().splitlines()
 
     docs = [_json.loads(lines[i]) for i in range(1, len(lines), 2)]
-    noise_docs = [d for d in docs if d.get("artiforge", {}).get("phase_id", 0) == 0]
+    noise_docs = [d for d in docs if d.get("labels", {}).get("phase_id", "0") == "0"]
 
     assert len(noise_docs) > 0
     for doc in noise_docs:

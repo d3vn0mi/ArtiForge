@@ -154,6 +154,32 @@ def test_generate_ndjson_valid(runner, tmp_path):
         json.loads(line)   # raises if invalid
 
 
+def test_generate_no_meta_strips_labels(runner, tmp_path):
+    result = runner.invoke(main, ["generate", "--lab", "uc3",
+                                   "--output", str(tmp_path), "--no-meta"])
+    assert result.exit_code == 0
+    assert "no labels" in result.output
+    run_dir = next(tmp_path.glob("uc3_*"))
+    ndjson = (run_dir / "elastic" / "bulk_import.ndjson").read_text()
+    for line in ndjson.strip().splitlines():
+        doc = json.loads(line)
+        if "index" in doc:
+            continue   # action line, not a document
+        assert "labels" not in doc
+        assert "artiforge" not in doc
+
+
+def test_generate_default_emits_labels(runner, tmp_path):
+    runner.invoke(main, ["generate", "--lab", "uc3", "--output", str(tmp_path)])
+    run_dir = next(tmp_path.glob("uc3_*"))
+    ndjson = (run_dir / "elastic" / "bulk_import.ndjson").read_text()
+    docs = [json.loads(l) for l in ndjson.strip().splitlines()]
+    documents = [d for d in docs if "index" not in d]
+    assert documents, "No documents written"
+    assert all("labels" in d for d in documents)
+    assert all("phase_id" in d["labels"] for d in documents)
+
+
 def test_generate_dry_run_no_files(runner, tmp_path):
     result = runner.invoke(main, ["generate", "--lab", "uc3",
                                    "--output", str(tmp_path), "--dry-run"])

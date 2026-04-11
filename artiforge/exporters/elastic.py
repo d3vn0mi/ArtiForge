@@ -82,8 +82,14 @@ _ECS_CATEGORY: dict[int, list[str]] = {
 }
 
 
-def _to_ecs(ev: GeneratedEvent) -> dict:
-    """Convert a GeneratedEvent to an ECS-compatible Winlogbeat document."""
+def _to_ecs(ev: GeneratedEvent, include_meta: bool = True) -> dict:
+    """Convert a GeneratedEvent to an ECS-compatible Winlogbeat document.
+
+    When include_meta is True (default), lab-scoped metadata is emitted under
+    the ECS-standard labels.* namespace so raw _source documents look like
+    real Winlogbeat data. Set to False for max-realism scenarios where phase
+    grading is done out-of-band.
+    """
     doc: dict = {
         "@timestamp": ev.timestamp.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z",
         "event": {
@@ -111,11 +117,13 @@ def _to_ecs(ev: GeneratedEvent) -> dict:
             "event_id": ev.eid,
             "event_data": ev.event_data,
         },
-        "artiforge": {
-            "phase_id": ev.phase_id,
-            "phase_name": ev.phase_name,
-        },
     }
+
+    if include_meta:
+        doc["labels"] = {
+            "phase_id": str(ev.phase_id),
+            "phase_name": ev.phase_name,
+        }
 
     # Promote common fields to top level for easier hunting
     ed = ev.event_data
@@ -162,8 +170,16 @@ def _to_ecs(ev: GeneratedEvent) -> dict:
     return doc
 
 
-def export(bundle: ArtifactBundle, output_dir: Path) -> Path:
-    """Write bulk_import.ndjson. Return the written path."""
+def export(bundle: ArtifactBundle, output_dir: Path, include_meta: bool = True) -> Path:
+    """Write bulk_import.ndjson. Return the written path.
+
+    Args:
+        bundle: The artifact bundle to export.
+        output_dir: Directory to write bulk_import.ndjson into.
+        include_meta: When True (default), emit labels.phase_id and
+            labels.phase_name on each document. Set to False to strip the
+            labels block entirely (for max-realism scenarios).
+    """
     output_dir.mkdir(parents=True, exist_ok=True)
 
     index_name = (
@@ -175,7 +191,7 @@ def export(bundle: ArtifactBundle, output_dir: Path) -> Path:
     lines: list[str] = []
     for ev in sorted(bundle.events, key=lambda e: e.timestamp):
         action = json.dumps({"index": {"_index": index_name}})
-        doc = json.dumps(_to_ecs(ev))
+        doc = json.dumps(_to_ecs(ev, include_meta=include_meta))
         lines.append(action)
         lines.append(doc)
 
