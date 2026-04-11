@@ -120,6 +120,9 @@ def _to_ecs(ev: GeneratedEvent, include_meta: bool = True) -> dict:
     }
 
     if include_meta:
+        # ECS labels.* fields are all keyword-typed; phase_id must be a string
+        # so ES maps it as keyword (not integer) under both the explicit
+        # setup_index.sh template and fallback dynamic mapping.
         doc["labels"] = {
             "phase_id": str(ev.phase_id),
             "phase_name": ev.phase_name,

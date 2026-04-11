@@ -180,6 +180,25 @@ def test_generate_default_emits_labels(runner, tmp_path):
     assert all("phase_id" in d["labels"] for d in documents)
 
 
+def test_generate_no_meta_with_noise_lab_warns(runner, tmp_path):
+    """--no-meta on a lab with a noise: section should emit a warning."""
+    result = runner.invoke(main, ["generate", "--lab", "uc3n",
+                                   "--output", str(tmp_path), "--no-meta"])
+    assert result.exit_code == 0
+    # Click test runner merges stderr into .output
+    assert "warn" in result.output.lower()
+    assert "--no-meta" in result.output
+    assert "noise" in result.output
+
+
+def test_generate_no_meta_without_noise_no_warning(runner, tmp_path):
+    """--no-meta on a lab without noise should not warn."""
+    result = runner.invoke(main, ["generate", "--lab", "uc3",
+                                   "--output", str(tmp_path), "--no-meta"])
+    assert result.exit_code == 0
+    assert "[warn]" not in result.output
+
+
 def test_generate_dry_run_no_files(runner, tmp_path):
     result = runner.invoke(main, ["generate", "--lab", "uc3",
                                    "--output", str(tmp_path), "--dry-run"])
