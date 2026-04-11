@@ -342,7 +342,13 @@ process.command_line : "Compress-Archive" and host.name : "WIN-WS2"
 See all 40 events in attack order across all hosts:
 
 ```kql
-artiforge.phase_id : *
+labels.phase_id : *
+```
+
+To filter out noise events (UC3N):
+
+```kql
+NOT labels.phase_name : "noise"
 ```
 
 Add these columns in Discover for a clean timeline:
@@ -350,10 +356,15 @@ Add these columns in Discover for a clean timeline:
 - `host.name`
 - `winlog.event_id`
 - `winlog.channel`
-- `artiforge.phase_name`
+- `labels.phase_name`
 - `process.command_line`
 
 Sort by `@timestamp` ascending.
+
+> **Note:** Lab-scoped metadata lives under the ECS-standard `labels.*` namespace
+> (was `artiforge.*` prior to v0.6). To generate events with no labels block at
+> all — for a max-realism scenario where phase grading is done out-of-band — use
+> `artiforge generate --lab uc3 --no-meta`.
 
 ---
 

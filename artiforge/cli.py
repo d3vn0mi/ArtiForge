@@ -308,9 +308,14 @@ def info(lab: str):
     default=0, type=int, show_default=True,
     help="Global timestamp jitter: each event timestamp is shifted ±N seconds randomly",
 )
+@click.option(
+    "--no-meta", "no_meta", is_flag=True, default=False,
+    help="Strip the labels.phase_id / labels.phase_name block from NDJSON output "
+         "(max realism — phase grading is done out-of-band)",
+)
 def generate(lab: str | None, lab_path: str | None, output: str, fmt: str,
              phases: str | None, base_time: str | None, dry_run: bool,
-             seed: int | None, jitter: int):
+             seed: int | None, jitter: int, no_meta: bool):
     """Generate event log artifacts and file stubs for a lab scenario."""
 
     if not lab and not lab_path:
@@ -406,9 +411,10 @@ def generate(lab: str | None, lab_path: str | None, output: str, fmt: str,
     # ── Elastic export
     if "elastic" in formats:
         elastic_dir = run_dir / "elastic"
-        ndjson = elastic.export(bundle, elastic_dir)
+        ndjson = elastic.export(bundle, elastic_dir, include_meta=not no_meta)
         written.append(ndjson)
-        click.echo(f"  [elastic] → {ndjson}")
+        meta_tag = " (no labels)" if no_meta else ""
+        click.echo(f"  [elastic] → {ndjson}{meta_tag}")
 
     # ── Navigator layer (written whenever the lab has MITRE techniques)
     all_tids = [tid for p in spec.attack.phases for tid in p.mitre]

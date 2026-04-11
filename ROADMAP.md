@@ -125,15 +125,12 @@ Better guardrails for scenario authors.
 
 ---
 
-## v0.6 — Kibana Realism
+## v0.6 — Kibana Realism ✓
 
-- [ ] Rename `artiforge.*` → `labels.*` in NDJSON export (ECS-standard namespace;
+- [x] Rename `artiforge.*` → `labels.*` in NDJSON export (ECS-standard namespace;
   `labels.*` appears in real Winlogbeat data so raw `_source` looks authentic)
-  — changes: `exporters/elastic.py`, `scripts/setup_index.sh`, `tests/test_exporters.py`,
-  `QUICKSTART.md`, `labs/uc3n/trainee_brief.md`, `labs/uc3/trainer_guide.md`
-- [ ] `--no-meta` flag on `generate` — strips the `labels` block entirely from NDJSON
+- [x] `--no-meta` flag on `generate` — strips the `labels` block entirely from NDJSON
   for max-realism scenarios where phase grading is done out-of-band
-  — changes: `exporters/elastic.py` (`include_meta=True` default), `cli.py`
 
 ---
 

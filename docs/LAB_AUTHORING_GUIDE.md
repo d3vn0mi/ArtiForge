@@ -1056,4 +1056,4 @@ Return a `dict[str, str]` of EventData field names to values. Use `fields.get("K
 | Events appear at wrong timestamps | Confusion between phase offset and event offset | `offset_minutes` is on the phase, `offset_seconds` is on the event. Total = base_time + both. |
 | ProcessGuid doesn't correlate events | Not using YAML anchors | Define `&anchor` on Sysmon 1, use `*anchor` on related events |
 | `schema version mismatch` warning | Lab uses a different `lab_schema_version` | Set `lab_schema_version: "1"` in the `lab` section |
-| Noise events mixed with attack events | Expected behavior | Noise is tagged `phase_id=0`. Use the web UI filter or Kibana query `NOT artiforge.phase_id:0` |
+| Noise events mixed with attack events | Expected behavior | Noise is tagged `phase_id=0`. Use the web UI filter or Kibana query `NOT labels.phase_id : "0"` |

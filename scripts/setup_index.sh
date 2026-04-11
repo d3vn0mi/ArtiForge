@@ -49,8 +49,8 @@ curl -sf -X PUT "$ES/_index_template/artiforge" \
           "host.hostname":     { "type": "keyword" },
           "event.code":        { "type": "keyword" },
           "event.provider":    { "type": "keyword" },
-          "artiforge.phase_id":   { "type": "integer" },
-          "artiforge.phase_name": { "type": "keyword" },
+          "labels.phase_id":   { "type": "keyword" },
+          "labels.phase_name": { "type": "keyword" },
           "process.command_line": { "type": "wildcard" },
           "process.executable":   { "type": "keyword" },
           "destination.ip":    { "type": "ip" },
@@ -78,8 +78,7 @@ curl -sf -X POST "$KIBANA/api/data_views/data_view" \
     "data_view": {
       "title": "winlogbeat-artiforge-*",
       "name":  "ArtiForge Labs",
-      "timeFieldName": "@timestamp",
-      "sourceFilters": [{ "value": "artiforge" }]
+      "timeFieldName": "@timestamp"
     }
   }' | python3 -c "
 import sys, json
