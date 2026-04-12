@@ -78,7 +78,7 @@ attack:
 
   # ── Noise configuration ──────────────────────────────────────────────────────
   # Each block adds benign background events tagged phase_id=0/phase_name="noise".
-  # Use the KQL filter  NOT artiforge.phase_name : "noise"  to strip them out
+  # Use the KQL filter  NOT labels.phase_name : "noise"  to strip them out
   # and focus on the attack path.  Remove the filter to see the full picture.
   noise:
 

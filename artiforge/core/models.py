@@ -84,6 +84,8 @@ class EventSpec(BaseModel):
     repeat_gap_seconds: int = Field(default=30, ge=0)
     jitter_seconds: int = Field(default=0, ge=0)        # ±N second timestamp jitter
     repeat_jitter_seconds: int = Field(default=0, ge=0)  # ±N jitter between repeats
+    session: str | None = None       # correlation session label
+    process: str | None = None       # correlation process label
 
 
 class FileArtifactSpec(BaseModel):
@@ -95,6 +97,11 @@ class FileArtifactSpec(BaseModel):
     lnk_args: str | None = None
 
 
+class ValidationSpec(BaseModel):
+    """Per-phase validation configuration."""
+    suppress: list[str] = Field(default_factory=list)
+
+
 class Phase(BaseModel):
     id: int
     name: str
@@ -104,6 +111,7 @@ class Phase(BaseModel):
     user: str | None = None         # default user for events in this phase
     events: list[EventSpec] = Field(default_factory=list)
     file_artifacts: list[FileArtifactSpec] = Field(default_factory=list)
+    validation: ValidationSpec | None = None
 
 
 class AttackSpec(BaseModel):

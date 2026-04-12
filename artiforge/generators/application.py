@@ -29,8 +29,11 @@ _GENERATORS = {
 
 
 def generate(eid: int, fields: dict, host: Host, user: User | None,
-             spec: Any, timestamp: Any) -> dict:
+             spec: Any, timestamp: Any, ctx: Any = None,
+             session_label: str = "default",
+             process_label: str = "default") -> dict:
     fn = _GENERATORS.get(eid)
     if fn is None:
         raise ValueError(f"Application EID {eid} not implemented.")
-    return fn(fields=fields, host=host, user=user, spec=spec, timestamp=timestamp)
+    return fn(fields=fields, host=host, user=user, spec=spec, timestamp=timestamp,
+              ctx=ctx, session_label=session_label, process_label=process_label)

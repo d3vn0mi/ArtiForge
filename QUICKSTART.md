@@ -342,7 +342,13 @@ process.command_line : "Compress-Archive" and host.name : "WIN-WS2"
 See all 40 events in attack order across all hosts:
 
 ```kql
-artiforge.phase_id : *
+labels.phase_id : *
+```
+
+To filter out noise events (UC3N):
+
+```kql
+NOT labels.phase_name : "noise"
 ```
 
 Add these columns in Discover for a clean timeline:
@@ -350,10 +356,53 @@ Add these columns in Discover for a clean timeline:
 - `host.name`
 - `winlog.event_id`
 - `winlog.channel`
-- `artiforge.phase_name`
+- `labels.phase_name`
 - `process.command_line`
 
 Sort by `@timestamp` ascending.
+
+> **Note:** Lab-scoped metadata lives under the ECS-standard `labels.*` namespace
+> (was `artiforge.*` prior to v0.6). To generate events with no labels block at
+> all — for a max-realism scenario where phase grading is done out-of-band — use
+> `artiforge generate --lab uc3 --no-meta`.
+
+---
+
+## Upgrading from v0.5
+
+ArtiForge v0.6 moved lab-scoped metadata from the `artiforge.*` namespace to
+the ECS-standard `labels.*` namespace (`labels.phase_id`, `labels.phase_name`).
+This is a breaking change for Kibana state created under v0.5. Follow these
+steps before re-ingesting with v0.6:
+
+```bash
+# 1. Delete any indices created under the v0.5 template.
+#    (Old indices have artiforge.phase_id mapped as integer — that mapping
+#    is immutable, so new labels.* writes get inconsistent dynamic mapping.)
+curl -X DELETE "http://localhost:9200/winlogbeat-artiforge-*"
+
+# 2. Delete the existing "ArtiForge Labs" data view in Kibana.
+#    Stack Management -> Data Views -> ArtiForge Labs -> trash icon.
+#    (The v0.5 data view has a sourceFilter hiding the artiforge.* namespace
+#    that no longer exists, and re-running setup_index.sh will not update it.)
+
+# 3. Re-run the setup script and ingest as normal.
+bash scripts/setup_index.sh
+bash scripts/run_lab.sh uc3
+```
+
+If you have saved Kibana searches or dashboards that reference
+`artiforge.phase_id` / `artiforge.phase_name`, update them to use
+`labels.phase_id` / `labels.phase_name`.
+
+### `--no-meta` and noisy labs
+
+`artiforge generate --no-meta` strips the entire `labels.*` block from the
+NDJSON output. Do **not** use it with labs that have a `noise:` section
+(currently **UC3N**) — the trainee brief's `NOT labels.phase_name : "noise"`
+query will silently match nothing. `--no-meta` is intended for max-realism
+scenarios where phase grading happens out-of-band. ArtiForge will emit a
+warning if you combine `--no-meta` with a noise-enabled lab.
 
 ---
 

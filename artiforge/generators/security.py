@@ -12,6 +12,21 @@ from datetime import datetime
 from typing import Any
 
 from artiforge.core.models import Host, User
+from artiforge.core.correlation import CorrelationContext
+
+
+def _resolve(fields: dict, key: str, ctx, session_label: str, fallback_fn):
+    """Three-tier field resolution: YAML > correlation > random default."""
+    if key in fields:
+        return fields[key]
+    if ctx is not None:
+        session = ctx.get_session(session_label)
+        if session is not None:
+            if key in ("SubjectLogonId", "TargetLogonId"):
+                return session.logon_id
+            if key == "LogonGuid":
+                return session.logon_guid
+    return fallback_fn()
 
 
 def _hex(n: int | None = None) -> str:
@@ -24,8 +39,25 @@ def _logon_id() -> str:
     return _hex(random.randint(0x100000, 0xFFFFFF))
 
 
-def _pid() -> str:
-    return str(random.randint(1000, 15000))
+def _pid(category: str = "user") -> str:
+    ranges = {
+        "system":  (4, 800),
+        "service": (800, 5000),
+        "user":    (5000, 65535),
+    }
+    lo, hi = ranges.get(category, ranges["user"])
+    return str(random.randint(lo // 4, hi // 4) * 4)
+
+_PID_CATEGORIES = {
+    "svchost.exe": "service", "lsass.exe": "service",
+    "services.exe": "service", "spoolsv.exe": "service",
+    "System": "system", "smss.exe": "system",
+    "csrss.exe": "system", "wininit.exe": "system",
+}
+
+def _pid_for_image(image: str) -> str:
+    name = image.rsplit("\\", 1)[-1] if "\\" in image else image
+    return _pid(_PID_CATEGORIES.get(name, "user"))
 
 
 def _new_logon_guid() -> str:
@@ -52,8 +84,16 @@ def _sid(host: Host, user: User | None) -> str:
 
 # ── EID 4624 — Successful Logon ───────────────────────────────────────────────
 
-def eid_4624(fields: dict, host: Host, user: User | None, **_) -> dict:
+def eid_4624(fields: dict, host: Host, user: User | None,
+             ctx=None, session_label: str = "default", **_) -> dict:
     logon_type = str(fields.get("LogonType", "3"))
+    logon_id = fields.get("TargetLogonId", _logon_id())
+    logon_guid = fields.get("LogonGuid",
+        _null_guid() if fields.get("AuthenticationPackageName") == "NTLM"
+        else _new_logon_guid())
+    if ctx is not None:
+        ctx.register_session(logon_id, logon_guid,
+                             user.username if user else "-", label=session_label)
     return {
         "SubjectUserSid": "S-1-5-18",
         "SubjectUserName": "-",
@@ -62,14 +102,12 @@ def eid_4624(fields: dict, host: Host, user: User | None, **_) -> dict:
         "TargetUserSid": _sid(host, user),
         "TargetUserName": fields.get("TargetUserName", user.username if user else "-"),
         "TargetDomainName": fields.get("TargetDomainName", user.domain if user else "-"),
-        "TargetLogonId": _logon_id(),
+        "TargetLogonId": logon_id,
         "LogonType": logon_type,
         "LogonProcessName": fields.get("LogonProcessName", "User32" if logon_type == "10" else "NtLmSsp"),
         "AuthenticationPackageName": fields.get("AuthenticationPackageName", "Negotiate"),
         "WorkstationName": fields.get("WorkstationName", host.name),
-        "LogonGuid": fields.get("LogonGuid",
-            _null_guid() if fields.get("AuthenticationPackageName") == "NTLM"
-            else _new_logon_guid()),
+        "LogonGuid": logon_guid,
         "TransmittedServices": "-",
         "LmPackageName": "-",
         "KeyLength": "0",
@@ -118,24 +156,26 @@ def eid_4625(fields: dict, host: Host, user: User | None, **_) -> dict:
 
 # ── EID 4634 — Logoff ─────────────────────────────────────────────────────────
 
-def eid_4634(fields: dict, user: User | None, **_) -> dict:
+def eid_4634(fields: dict, user: User | None,
+             ctx=None, session_label: str = "default", **_) -> dict:
     return {
         "TargetUserSid": fields.get("TargetUserSid", "S-1-5-21-xxx"),
         "TargetUserName": fields.get("TargetUserName", user.username if user else "-"),
         "TargetDomainName": fields.get("TargetDomainName", user.domain if user else "-"),
-        "TargetLogonId": _logon_id(),
+        "TargetLogonId": _resolve(fields, "TargetLogonId", ctx, session_label, _logon_id),
         "LogonType": str(fields.get("LogonType", "10")),
     }
 
 
 # ── EID 4648 — Explicit Credentials Logon ────────────────────────────────────
 
-def eid_4648(fields: dict, host: Host, user: User | None, **_) -> dict:
+def eid_4648(fields: dict, host: Host, user: User | None,
+             ctx=None, session_label: str = "default", **_) -> dict:
     return {
         "SubjectUserSid": _sid(host, user),
         "SubjectUserName": fields.get("SubjectUserName", user.username if user else "-"),
         "SubjectDomainName": fields.get("SubjectDomainName", user.domain if user else "-"),
-        "SubjectLogonId": _logon_id(),
+        "SubjectLogonId": _resolve(fields, "SubjectLogonId", ctx, session_label, _logon_id),
         "LogonGuid": fields.get("LogonGuid", _new_logon_guid()),
         "TargetUserName": fields.get("TargetUserName", "svc_backup_admin"),
         "TargetDomainName": fields.get("TargetDomainName", host.name),
@@ -151,14 +191,15 @@ def eid_4648(fields: dict, host: Host, user: User | None, **_) -> dict:
 
 # ── EID 4688 — Process Creation ───────────────────────────────────────────────
 
-def eid_4688(fields: dict, host: Host, user: User | None, **_) -> dict:
+def eid_4688(fields: dict, host: Host, user: User | None,
+             ctx=None, session_label: str = "default", **_) -> dict:
     subject_user = fields.get("SubjectUserName", user.username if user else "SYSTEM")
     subject_domain = fields.get("SubjectDomainName", user.domain if user else "NT AUTHORITY")
     return {
         "SubjectUserSid": _sid(host, user),
         "SubjectUserName": subject_user,
         "SubjectDomainName": subject_domain,
-        "SubjectLogonId": _logon_id(),
+        "SubjectLogonId": _resolve(fields, "SubjectLogonId", ctx, session_label, _logon_id),
         "NewProcessId": _pid(),
         "NewProcessName": fields.get("NewProcessName", r"C:\Windows\System32\cmd.exe"),
         "TokenElevationType": fields.get("TokenElevationType", "%%1938"),
@@ -175,14 +216,15 @@ def eid_4688(fields: dict, host: Host, user: User | None, **_) -> dict:
 
 # ── EID 4698 — Scheduled Task Created ────────────────────────────────────────
 
-def eid_4698(fields: dict, host: Host, user: User | None, **_) -> dict:
+def eid_4698(fields: dict, host: Host, user: User | None,
+             ctx=None, session_label: str = "default", **_) -> dict:
     task_name = fields.get("TaskName", r"\MicrosoftEdgeUpdateTaskMachineUA")
     task_content = fields.get("TaskContent", _default_task_xml(task_name))
     return {
         "SubjectUserSid": _sid(host, user),
         "SubjectUserName": fields.get("SubjectUserName", user.username if user else "SYSTEM"),
         "SubjectDomainName": fields.get("SubjectDomainName", user.domain if user else "NT AUTHORITY"),
-        "SubjectLogonId": _logon_id(),
+        "SubjectLogonId": _resolve(fields, "SubjectLogonId", ctx, session_label, _logon_id),
         "TaskName": task_name,
         "TaskContent": task_content,
     }
@@ -202,7 +244,8 @@ def _default_task_xml(task_name: str) -> str:
 
 # ── EID 4720 — User Account Created ──────────────────────────────────────────
 
-def eid_4720(fields: dict, host: Host, user: User | None, spec: Any, **_) -> dict:
+def eid_4720(fields: dict, host: Host, user: User | None, spec: Any,
+             ctx=None, session_label: str = "default", **_) -> dict:
     new_account = fields.get("TargetUserName", spec.attack.malicious_account)
     return {
         "TargetUserName": new_account,
@@ -211,7 +254,7 @@ def eid_4720(fields: dict, host: Host, user: User | None, spec: Any, **_) -> dic
         "SubjectUserSid": _sid(host, user),
         "SubjectUserName": fields.get("SubjectUserName", user.username if user else "SYSTEM"),
         "SubjectDomainName": fields.get("SubjectDomainName", user.domain if user else "NT AUTHORITY"),
-        "SubjectLogonId": _logon_id(),
+        "SubjectLogonId": _resolve(fields, "SubjectLogonId", ctx, session_label, _logon_id),
         "PrivilegeList": "-",
         "SamAccountName": new_account,
         "DisplayName": "%%1793",
@@ -236,7 +279,8 @@ def eid_4720(fields: dict, host: Host, user: User | None, spec: Any, **_) -> dic
 
 # ── EID 4732 — Member Added to Security-Enabled Local Group ──────────────────
 
-def eid_4732(fields: dict, host: Host, user: User | None, spec: Any, **_) -> dict:
+def eid_4732(fields: dict, host: Host, user: User | None, spec: Any,
+             ctx=None, session_label: str = "default", **_) -> dict:
     new_account = fields.get("MemberName", spec.attack.malicious_account)
     return {
         "MemberSid": fields.get("MemberSid", f"{host.sid_prefix}-1100"),
@@ -247,7 +291,7 @@ def eid_4732(fields: dict, host: Host, user: User | None, spec: Any, **_) -> dic
         "SubjectUserSid": _sid(host, user),
         "SubjectUserName": fields.get("SubjectUserName", user.username if user else "SYSTEM"),
         "SubjectDomainName": fields.get("SubjectDomainName", user.domain if user else "NT AUTHORITY"),
-        "SubjectLogonId": _logon_id(),
+        "SubjectLogonId": _resolve(fields, "SubjectLogonId", ctx, session_label, _logon_id),
         "PrivilegeList": "-",
     }
 
@@ -323,12 +367,13 @@ def eid_4771(fields: dict, host: Host, user: User | None, **_) -> dict:
 
 # ── EID 4723 — Password Change Attempted ─────────────────────────────────────
 
-def eid_4723(fields: dict, host: Host, user: User | None, **_) -> dict:
+def eid_4723(fields: dict, host: Host, user: User | None,
+             ctx=None, session_label: str = "default", **_) -> dict:
     return {
         "SubjectUserSid": _sid(host, user),
         "SubjectUserName": fields.get("SubjectUserName", user.username if user else "-"),
         "SubjectDomainName": fields.get("SubjectDomainName", user.domain if user else "-"),
-        "SubjectLogonId": _logon_id(),
+        "SubjectLogonId": _resolve(fields, "SubjectLogonId", ctx, session_label, _logon_id),
         "TargetUserName": fields.get("TargetUserName", user.username if user else "-"),
         "TargetDomainName": fields.get("TargetDomainName", user.domain if user else "-"),
         "TargetSid": _sid(host, user),
@@ -337,12 +382,13 @@ def eid_4723(fields: dict, host: Host, user: User | None, **_) -> dict:
 
 # ── EID 4724 — Password Reset ─────────────────────────────────────────────────
 
-def eid_4724(fields: dict, host: Host, user: User | None, **_) -> dict:
+def eid_4724(fields: dict, host: Host, user: User | None,
+             ctx=None, session_label: str = "default", **_) -> dict:
     return {
         "SubjectUserSid": _sid(host, user),
         "SubjectUserName": fields.get("SubjectUserName", user.username if user else "SYSTEM"),
         "SubjectDomainName": fields.get("SubjectDomainName", user.domain if user else "NT AUTHORITY"),
-        "SubjectLogonId": _logon_id(),
+        "SubjectLogonId": _resolve(fields, "SubjectLogonId", ctx, session_label, _logon_id),
         "TargetUserName": fields.get("TargetUserName", "svc_backup_admin"),
         "TargetDomainName": fields.get("TargetDomainName", host.name),
         "TargetSid": fields.get("TargetSid", f"{host.sid_prefix}-1100"),
@@ -351,12 +397,13 @@ def eid_4724(fields: dict, host: Host, user: User | None, **_) -> dict:
 
 # ── EID 4725 — User Account Disabled ─────────────────────────────────────────
 
-def eid_4725(fields: dict, host: Host, user: User | None, **_) -> dict:
+def eid_4725(fields: dict, host: Host, user: User | None,
+             ctx=None, session_label: str = "default", **_) -> dict:
     return {
         "SubjectUserSid": _sid(host, user),
         "SubjectUserName": fields.get("SubjectUserName", user.username if user else "SYSTEM"),
         "SubjectDomainName": fields.get("SubjectDomainName", user.domain if user else "NT AUTHORITY"),
-        "SubjectLogonId": _logon_id(),
+        "SubjectLogonId": _resolve(fields, "SubjectLogonId", ctx, session_label, _logon_id),
         "TargetUserName": fields.get("TargetUserName", "victim.user"),
         "TargetDomainName": fields.get("TargetDomainName", host.name),
         "TargetSid": fields.get("TargetSid", f"{host.sid_prefix}-1101"),
@@ -365,12 +412,13 @@ def eid_4725(fields: dict, host: Host, user: User | None, **_) -> dict:
 
 # ── EID 4726 — User Account Deleted ──────────────────────────────────────────
 
-def eid_4726(fields: dict, host: Host, user: User | None, **_) -> dict:
+def eid_4726(fields: dict, host: Host, user: User | None,
+             ctx=None, session_label: str = "default", **_) -> dict:
     return {
         "SubjectUserSid": _sid(host, user),
         "SubjectUserName": fields.get("SubjectUserName", user.username if user else "SYSTEM"),
         "SubjectDomainName": fields.get("SubjectDomainName", user.domain if user else "NT AUTHORITY"),
-        "SubjectLogonId": _logon_id(),
+        "SubjectLogonId": _resolve(fields, "SubjectLogonId", ctx, session_label, _logon_id),
         "TargetUserName": fields.get("TargetUserName", "victim.user"),
         "TargetDomainName": fields.get("TargetDomainName", host.name),
         "TargetSid": fields.get("TargetSid", f"{host.sid_prefix}-1101"),
@@ -398,12 +446,13 @@ def eid_4726(fields: dict, host: Host, user: User | None, **_) -> dict:
 
 # ── EID 4656 — Handle to Object Requested ────────────────────────────────────
 
-def eid_4656(fields: dict, host: Host, user: User | None, **_) -> dict:
+def eid_4656(fields: dict, host: Host, user: User | None,
+             ctx=None, session_label: str = "default", **_) -> dict:
     return {
         "SubjectUserSid": _sid(host, user),
         "SubjectUserName": fields.get("SubjectUserName", user.username if user else "-"),
         "SubjectDomainName": fields.get("SubjectDomainName", user.domain if user else "-"),
-        "SubjectLogonId": _logon_id(),
+        "SubjectLogonId": _resolve(fields, "SubjectLogonId", ctx, session_label, _logon_id),
         "ObjectServer": fields.get("ObjectServer", "Security"),
         "ObjectType": fields.get("ObjectType", "File"),
         "ObjectName": fields.get("ObjectName", r"C:\Windows\System32\lsass.exe"),
@@ -422,12 +471,13 @@ def eid_4656(fields: dict, host: Host, user: User | None, **_) -> dict:
 
 # ── EID 4663 — Object Access ──────────────────────────────────────────────────
 
-def eid_4663(fields: dict, host: Host, user: User | None, **_) -> dict:
+def eid_4663(fields: dict, host: Host, user: User | None,
+             ctx=None, session_label: str = "default", **_) -> dict:
     return {
         "SubjectUserSid": _sid(host, user),
         "SubjectUserName": fields.get("SubjectUserName", user.username if user else "-"),
         "SubjectDomainName": fields.get("SubjectDomainName", user.domain if user else "-"),
-        "SubjectLogonId": _logon_id(),
+        "SubjectLogonId": _resolve(fields, "SubjectLogonId", ctx, session_label, _logon_id),
         "ObjectServer": fields.get("ObjectServer", "Security"),
         "ObjectType": fields.get("ObjectType", "File"),
         "ObjectName": fields.get("ObjectName", r"C:\Windows\System32\lsass.DMP"),
@@ -443,12 +493,13 @@ def eid_4663(fields: dict, host: Host, user: User | None, **_) -> dict:
 
 # ── EID 4657 — Registry Value Modified ───────────────────────────────────────
 
-def eid_4657(fields: dict, host: Host, user: User | None, **_) -> dict:
+def eid_4657(fields: dict, host: Host, user: User | None,
+             ctx=None, session_label: str = "default", **_) -> dict:
     return {
         "SubjectUserSid": _sid(host, user),
         "SubjectUserName": fields.get("SubjectUserName", user.username if user else "-"),
         "SubjectDomainName": fields.get("SubjectDomainName", user.domain if user else "-"),
-        "SubjectLogonId": _logon_id(),
+        "SubjectLogonId": _resolve(fields, "SubjectLogonId", ctx, session_label, _logon_id),
         "ObjectName": fields.get("ObjectName",
             r"\REGISTRY\MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Run"),
         "ObjectValueName": fields.get("ObjectValueName", "Updater"),
@@ -465,12 +516,13 @@ def eid_4657(fields: dict, host: Host, user: User | None, **_) -> dict:
 
 # ── EID 4670 — Permissions on Object Changed ─────────────────────────────────
 
-def eid_4670(fields: dict, host: Host, user: User | None, **_) -> dict:
+def eid_4670(fields: dict, host: Host, user: User | None,
+             ctx=None, session_label: str = "default", **_) -> dict:
     return {
         "SubjectUserSid": _sid(host, user),
         "SubjectUserName": fields.get("SubjectUserName", user.username if user else "-"),
         "SubjectDomainName": fields.get("SubjectDomainName", user.domain if user else "-"),
-        "SubjectLogonId": _logon_id(),
+        "SubjectLogonId": _resolve(fields, "SubjectLogonId", ctx, session_label, _logon_id),
         "ObjectServer": fields.get("ObjectServer", "Security"),
         "ObjectType": fields.get("ObjectType", "File"),
         "ObjectName": fields.get("ObjectName", r"C:\ProgramData\update.exe"),
@@ -573,12 +625,13 @@ def eid_4947(fields: dict, **_) -> dict:
 
 # ── EID 4672 — Special Privileges Assigned to New Logon ──────────────────────
 
-def eid_4672(fields: dict, host: Host, user: User | None, **_) -> dict:
+def eid_4672(fields: dict, host: Host, user: User | None,
+             ctx=None, session_label: str = "default", **_) -> dict:
     return {
         "SubjectUserSid": _sid(host, user),
         "SubjectUserName": fields.get("SubjectUserName", user.username if user else "SYSTEM"),
         "SubjectDomainName": fields.get("SubjectDomainName", user.domain if user else "NT AUTHORITY"),
-        "SubjectLogonId": _logon_id(),
+        "SubjectLogonId": _resolve(fields, "SubjectLogonId", ctx, session_label, _logon_id),
         "PrivilegeList": fields.get("PrivilegeList", (
             "SeSecurityPrivilege\n\t\t\t\t"
             "SeTakeOwnershipPrivilege\n\t\t\t\t"
@@ -590,6 +643,90 @@ def eid_4672(fields: dict, host: Host, user: User | None, **_) -> dict:
             "SeImpersonatePrivilege\n\t\t\t\t"
             "SeDelegateSessionUserImpersonatePrivilege"
         )),
+    }
+
+
+# ── EID 1102 — Audit Log Cleared ─────────────────────────────────────────────
+
+def eid_1102(fields: dict, host: Host, user: User | None,
+             ctx=None, session_label: str = "default", **_) -> dict:
+    return {
+        "SubjectUserSid": _sid(host, user),
+        "SubjectUserName": fields.get("SubjectUserName", user.username if user else "SYSTEM"),
+        "SubjectDomainName": fields.get("SubjectDomainName", user.domain if user else "NT AUTHORITY"),
+        "SubjectLogonId": _resolve(fields, "SubjectLogonId", ctx, session_label, _logon_id),
+    }
+
+
+# ── EID 4697 — Service Installed ─────────────────────────────────────────────
+
+def eid_4697(fields: dict, host: Host, user: User | None,
+             ctx=None, session_label: str = "default", **_) -> dict:
+    return {
+        "SubjectUserSid": _sid(host, user),
+        "SubjectUserName": fields.get("SubjectUserName", user.username if user else "SYSTEM"),
+        "SubjectDomainName": fields.get("SubjectDomainName", user.domain if user else "NT AUTHORITY"),
+        "SubjectLogonId": _resolve(fields, "SubjectLogonId", ctx, session_label, _logon_id),
+        "ServiceName": fields.get("ServiceName", "WindowsUpdateSvc"),
+        "ServiceFileName": fields.get("ServiceFileName", r"C:\ProgramData\update.exe"),
+        "ServiceType": fields.get("ServiceType", "%%3520"),
+        "ServiceStartType": fields.get("ServiceStartType", "%%3542"),
+        "ServiceAccount": fields.get("ServiceAccount", "LocalSystem"),
+    }
+
+
+# ── EID 4703 — Token Right Adjusted ──────────────────────────────────────────
+
+def eid_4703(fields: dict, host: Host, user: User | None,
+             ctx=None, session_label: str = "default", **_) -> dict:
+    return {
+        "SubjectUserSid": _sid(host, user),
+        "SubjectUserName": fields.get("SubjectUserName", user.username if user else "SYSTEM"),
+        "SubjectDomainName": fields.get("SubjectDomainName", user.domain if user else "NT AUTHORITY"),
+        "SubjectLogonId": _resolve(fields, "SubjectLogonId", ctx, session_label, _logon_id),
+        "TargetUserSid": _sid(host, user),
+        "TargetUserName": fields.get("TargetUserName", user.username if user else "SYSTEM"),
+        "TargetDomainName": fields.get("TargetDomainName", user.domain if user else "NT AUTHORITY"),
+        "TargetLogonId": _resolve(fields, "TargetLogonId", ctx, session_label, _logon_id),
+        "ObjectServer": fields.get("ObjectServer", "LSA"),
+        "ObjectType": fields.get("ObjectType", "Token"),
+        "ProcessId": _pid(),
+        "ProcessName": fields.get("ProcessName", r"C:\Windows\System32\svchost.exe"),
+        "EnabledPrivilegeList": fields.get("EnabledPrivilegeList", "SeDebugPrivilege"),
+        "DisabledPrivilegeList": fields.get("DisabledPrivilegeList", "-"),
+    }
+
+
+# ── EID 4719 — System Audit Policy Changed ───────────────────────────────────
+
+def eid_4719(fields: dict, host: Host, user: User | None,
+             ctx=None, session_label: str = "default", **_) -> dict:
+    return {
+        "SubjectUserSid": _sid(host, user),
+        "SubjectUserName": fields.get("SubjectUserName", user.username if user else "SYSTEM"),
+        "SubjectDomainName": fields.get("SubjectDomainName", user.domain if user else "NT AUTHORITY"),
+        "SubjectLogonId": _resolve(fields, "SubjectLogonId", ctx, session_label, _logon_id),
+        "CategoryId": fields.get("CategoryId", "%%8274"),
+        "SubcategoryId": fields.get("SubcategoryId", "%%12544"),
+        "SubcategoryGuid": fields.get("SubcategoryGuid", _new_logon_guid()),
+        "AuditPolicyChanges": fields.get("AuditPolicyChanges", "%%8448"),
+    }
+
+
+# ── EID 4735 — Security-Enabled Local Group Changed ──────────────────────────
+
+def eid_4735(fields: dict, host: Host, user: User | None,
+             ctx=None, session_label: str = "default", **_) -> dict:
+    target_name = fields.get("TargetUserName", "Administrators")
+    return {
+        "SubjectUserSid": _sid(host, user),
+        "SubjectUserName": fields.get("SubjectUserName", user.username if user else "SYSTEM"),
+        "SubjectDomainName": fields.get("SubjectDomainName", user.domain if user else "NT AUTHORITY"),
+        "SubjectLogonId": _resolve(fields, "SubjectLogonId", ctx, session_label, _logon_id),
+        "TargetUserName": target_name,
+        "TargetDomainName": fields.get("TargetDomainName", host.name),
+        "TargetSid": fields.get("TargetSid", "S-1-5-32-544"),
+        "SamAccountName": fields.get("SamAccountName", target_name),
     }
 
 
@@ -629,12 +766,21 @@ _GENERATORS = {
     # Firewall
     4946: eid_4946,
     4947: eid_4947,
+    # Audit / policy / service
+    1102: eid_1102,
+    4697: eid_4697,
+    4703: eid_4703,
+    4719: eid_4719,
+    4735: eid_4735,
 }
 
 
 def generate(eid: int, fields: dict, host: Host, user: User | None,
-             spec: Any, timestamp: Any) -> dict:
+             spec: Any, timestamp: Any, ctx: Any = None,
+             session_label: str = "default",
+             process_label: str = "default") -> dict:
     fn = _GENERATORS.get(eid)
     if fn is None:
         raise ValueError(f"Security EID {eid} not implemented.")
-    return fn(fields=fields, host=host, user=user, spec=spec, timestamp=timestamp)
+    return fn(fields=fields, host=host, user=user, spec=spec, timestamp=timestamp,
+              ctx=ctx, session_label=session_label, process_label=process_label)

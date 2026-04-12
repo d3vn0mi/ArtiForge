@@ -142,7 +142,11 @@ def test_ndjson_document_ecs_fields(ndjson_path):
     assert "winlog" in doc
     assert "host" in doc
     assert "event" in doc
-    assert "artiforge" in doc
+    assert "labels" in doc
+    assert "phase_id" in doc["labels"]
+    assert "phase_name" in doc["labels"]
+    # artiforge.* namespace is retired — labels.* is ECS-standard
+    assert "artiforge" not in doc
 
 
 def test_ndjson_winlog_fields(ndjson_path):
@@ -158,10 +162,10 @@ def test_ndjson_winlog_fields(ndjson_path):
 def test_ndjson_all_phases_present(ndjson_path):
     lines = ndjson_path.read_text().strip().splitlines()
     phases = {
-        json.loads(lines[i]).get("artiforge", {}).get("phase_id")
+        json.loads(lines[i]).get("labels", {}).get("phase_id")
         for i in range(1, len(lines), 2)
     }
-    assert phases == {1, 2, 3, 4, 5}
+    assert phases == {"1", "2", "3", "4", "5"}
 
 
 def test_ndjson_process_fields_promoted_for_4688(ndjson_path):
@@ -189,3 +193,21 @@ def test_ndjson_network_fields_promoted_for_sysmon3(ndjson_path):
             found = True
             break
     assert found, "No Sysmon EID 3 document found in NDJSON"
+
+
+def test_ndjson_no_meta_strips_labels(bundle, tmp_path):
+    """--no-meta (include_meta=False) should omit the labels block entirely."""
+    out = elastic.export(bundle, tmp_path / "elastic_nometa", include_meta=False)
+    lines = out.read_text().strip().splitlines()
+    for i in range(1, len(lines), 2):
+        doc = json.loads(lines[i])
+        assert "labels" not in doc, f"labels block present in doc {i}"
+        assert "artiforge" not in doc
+
+
+def test_ndjson_labels_phase_id_is_keyword_string(ndjson_path):
+    """labels.phase_id must be a string so ES maps it as keyword, not integer."""
+    lines = ndjson_path.read_text().strip().splitlines()
+    for i in range(1, len(lines), 2):
+        doc = json.loads(lines[i])
+        assert isinstance(doc["labels"]["phase_id"], str)

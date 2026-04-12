@@ -20,16 +20,16 @@ scenario window:
 | WIN-WS2 | Logon pairs, process spawns, DNS queries | Medium (quiet before attacker arrives) |
 | WIN-BACKUP1 | Logon pairs, process spawns | Low |
 
-All noise events carry `artiforge.phase_name: "noise"` in Kibana.
+All noise events carry `labels.phase_name: "noise"` in Kibana.
 
 **Before you start hunting, try both of these queries:**
 
 ```kql
 # Full dataset — everything including noise
-artiforge.phase_id : *
+labels.phase_id : *
 
 # Attack events only — use this to check your answers
-NOT artiforge.phase_name : "noise"
+NOT labels.phase_name : "noise"
 ```
 
 Your goal is to find the attack without using the second filter — that is, to

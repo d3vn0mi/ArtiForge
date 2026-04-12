@@ -11,7 +11,7 @@
 
 **YAML-driven Windows event artifact generator for cybersecurity training labs**
 
-[![Version](https://img.shields.io/badge/version-0.5.0-blue?style=flat-square)](ROADMAP.md)
+[![Version](https://img.shields.io/badge/version-0.6.0-blue?style=flat-square)](ROADMAP.md)
 [![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue?style=flat-square)](setup.py)
 [![Docker](https://img.shields.io/badge/docker-ready-2496ED?style=flat-square)](Dockerfile)
@@ -90,6 +90,9 @@ artiforge generate --lab uc3
 
 # Add organic timestamp jitter (+/- N seconds per event)
 ./artiforge.sh generate --lab uc3 --jitter 5
+
+# Max-realism: strip the labels.phase_id / labels.phase_name block from NDJSON
+./artiforge.sh generate --lab uc3 --no-meta
 
 # Use a lab YAML from outside the built-in directory
 ./artiforge.sh generate --lab-path /path/to/lab.yaml
@@ -191,7 +194,7 @@ See [ROADMAP.md](ROADMAP.md) for the full plan.
 | **v0.3** | Realism — background noise, `--seed`, `--jitter`, beacon jitter | Done |
 | **v0.4** | Lab tooling — `check`, `diff`, `graph`, `validate --strict` | Done |
 | **v0.5** | MITRE ATT&CK integration, Navigator layers, web UI | Done |
-| **v0.6** | Kibana realism — ECS `labels.*` namespace, `--no-meta` flag | Next |
+| **v0.6** | Kibana realism — ECS `labels.*` namespace, `--no-meta` flag | Done |
 | **v0.9** | Distribution — PyPI, CI matrix, GHCR image, signed releases | Planned |
 | **v1.0** | Scenario library — 7 new labs (Kerberoasting, ransomware, etc.) | Planned |
 
