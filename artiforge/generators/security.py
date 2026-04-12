@@ -646,6 +646,90 @@ def eid_4672(fields: dict, host: Host, user: User | None,
     }
 
 
+# ── EID 1102 — Audit Log Cleared ─────────────────────────────────────────────
+
+def eid_1102(fields: dict, host: Host, user: User | None,
+             ctx=None, session_label: str = "default", **_) -> dict:
+    return {
+        "SubjectUserSid": _sid(host, user),
+        "SubjectUserName": fields.get("SubjectUserName", user.username if user else "SYSTEM"),
+        "SubjectDomainName": fields.get("SubjectDomainName", user.domain if user else "NT AUTHORITY"),
+        "SubjectLogonId": _resolve(fields, "SubjectLogonId", ctx, session_label, _logon_id),
+    }
+
+
+# ── EID 4697 — Service Installed ─────────────────────────────────────────────
+
+def eid_4697(fields: dict, host: Host, user: User | None,
+             ctx=None, session_label: str = "default", **_) -> dict:
+    return {
+        "SubjectUserSid": _sid(host, user),
+        "SubjectUserName": fields.get("SubjectUserName", user.username if user else "SYSTEM"),
+        "SubjectDomainName": fields.get("SubjectDomainName", user.domain if user else "NT AUTHORITY"),
+        "SubjectLogonId": _resolve(fields, "SubjectLogonId", ctx, session_label, _logon_id),
+        "ServiceName": fields.get("ServiceName", "WindowsUpdateSvc"),
+        "ServiceFileName": fields.get("ServiceFileName", r"C:\ProgramData\update.exe"),
+        "ServiceType": fields.get("ServiceType", "%%3520"),
+        "ServiceStartType": fields.get("ServiceStartType", "%%3542"),
+        "ServiceAccount": fields.get("ServiceAccount", "LocalSystem"),
+    }
+
+
+# ── EID 4703 — Token Right Adjusted ──────────────────────────────────────────
+
+def eid_4703(fields: dict, host: Host, user: User | None,
+             ctx=None, session_label: str = "default", **_) -> dict:
+    return {
+        "SubjectUserSid": _sid(host, user),
+        "SubjectUserName": fields.get("SubjectUserName", user.username if user else "SYSTEM"),
+        "SubjectDomainName": fields.get("SubjectDomainName", user.domain if user else "NT AUTHORITY"),
+        "SubjectLogonId": _resolve(fields, "SubjectLogonId", ctx, session_label, _logon_id),
+        "TargetUserSid": _sid(host, user),
+        "TargetUserName": fields.get("TargetUserName", user.username if user else "SYSTEM"),
+        "TargetDomainName": fields.get("TargetDomainName", user.domain if user else "NT AUTHORITY"),
+        "TargetLogonId": _resolve(fields, "TargetLogonId", ctx, session_label, _logon_id),
+        "ObjectServer": fields.get("ObjectServer", "LSA"),
+        "ObjectType": fields.get("ObjectType", "Token"),
+        "ProcessId": _pid(),
+        "ProcessName": fields.get("ProcessName", r"C:\Windows\System32\svchost.exe"),
+        "EnabledPrivilegeList": fields.get("EnabledPrivilegeList", "SeDebugPrivilege"),
+        "DisabledPrivilegeList": fields.get("DisabledPrivilegeList", "-"),
+    }
+
+
+# ── EID 4719 — System Audit Policy Changed ───────────────────────────────────
+
+def eid_4719(fields: dict, host: Host, user: User | None,
+             ctx=None, session_label: str = "default", **_) -> dict:
+    return {
+        "SubjectUserSid": _sid(host, user),
+        "SubjectUserName": fields.get("SubjectUserName", user.username if user else "SYSTEM"),
+        "SubjectDomainName": fields.get("SubjectDomainName", user.domain if user else "NT AUTHORITY"),
+        "SubjectLogonId": _resolve(fields, "SubjectLogonId", ctx, session_label, _logon_id),
+        "CategoryId": fields.get("CategoryId", "%%8274"),
+        "SubcategoryId": fields.get("SubcategoryId", "%%12544"),
+        "SubcategoryGuid": fields.get("SubcategoryGuid", _new_logon_guid()),
+        "AuditPolicyChanges": fields.get("AuditPolicyChanges", "%%8448"),
+    }
+
+
+# ── EID 4735 — Security-Enabled Local Group Changed ──────────────────────────
+
+def eid_4735(fields: dict, host: Host, user: User | None,
+             ctx=None, session_label: str = "default", **_) -> dict:
+    target_name = fields.get("TargetUserName", "Administrators")
+    return {
+        "SubjectUserSid": _sid(host, user),
+        "SubjectUserName": fields.get("SubjectUserName", user.username if user else "SYSTEM"),
+        "SubjectDomainName": fields.get("SubjectDomainName", user.domain if user else "NT AUTHORITY"),
+        "SubjectLogonId": _resolve(fields, "SubjectLogonId", ctx, session_label, _logon_id),
+        "TargetUserName": target_name,
+        "TargetDomainName": fields.get("TargetDomainName", host.name),
+        "TargetSid": fields.get("TargetSid", "S-1-5-32-544"),
+        "SamAccountName": fields.get("SamAccountName", target_name),
+    }
+
+
 # ── Dispatcher ────────────────────────────────────────────────────────────────
 
 _GENERATORS = {
@@ -682,6 +766,12 @@ _GENERATORS = {
     # Firewall
     4946: eid_4946,
     4947: eid_4947,
+    # Audit / policy / service
+    1102: eid_1102,
+    4697: eid_4697,
+    4703: eid_4703,
+    4719: eid_4719,
+    4735: eid_4735,
 }
 
 
