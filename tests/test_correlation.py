@@ -106,3 +106,86 @@ def test_labeled_process_parent_comes_from_current(ctx):
     ctx.register_process("{PG-2}", "7800", r"C:\Temp\mimi.exe", label="mimi")
     third = ctx.register_process("{PG-3}", "9000", r"C:\Temp\tool.exe", label="tool")
     assert third.parent_guid == "{PG-2}"
+
+
+# ── Security generator integration tests ────────────────────────────────────
+
+from artiforge.generators import security
+from datetime import datetime, timezone
+
+
+@pytest.fixture
+def ts():
+    return datetime(2026, 2, 19, 9, 12, 0, tzinfo=timezone.utc)
+
+
+@pytest.fixture
+def user():
+    from artiforge.core.models import User
+    return User(username="marcus.webb", domain="LAB", rid=1001)
+
+
+@pytest.fixture
+def spec_stub():
+    class _Attack:
+        malicious_account = "svc_backup_admin"
+    class _Spec:
+        attack = _Attack()
+    return _Spec()
+
+
+def test_4624_registers_session_in_context(ctx, user, ts, spec_stub):
+    result = security.generate(
+        4624, {}, ctx.host, user, spec_stub, ts,
+        ctx=ctx, session_label="default", process_label="default",
+    )
+    session = ctx.get_session("default")
+    assert session is not None
+    assert session.logon_id == result["TargetLogonId"]
+    assert session.logon_guid == result["LogonGuid"]
+
+
+def test_4688_reads_logon_id_from_context(ctx, user, ts, spec_stub):
+    security.generate(
+        4624, {}, ctx.host, user, spec_stub, ts,
+        ctx=ctx, session_label="default", process_label="default",
+    )
+    session = ctx.get_session("default")
+    result = security.generate(
+        4688, {}, ctx.host, user, spec_stub, ts,
+        ctx=ctx, session_label="default", process_label="default",
+    )
+    assert result["SubjectLogonId"] == session.logon_id
+
+
+def test_4634_reads_logon_id_from_context(ctx, user, ts, spec_stub):
+    security.generate(
+        4624, {}, ctx.host, user, spec_stub, ts,
+        ctx=ctx, session_label="default", process_label="default",
+    )
+    session = ctx.get_session("default")
+    result = security.generate(
+        4634, {}, ctx.host, user, spec_stub, ts,
+        ctx=ctx, session_label="default", process_label="default",
+    )
+    assert result["TargetLogonId"] == session.logon_id
+
+
+def test_yaml_fields_override_correlation(ctx, user, ts, spec_stub):
+    security.generate(
+        4624, {}, ctx.host, user, spec_stub, ts,
+        ctx=ctx, session_label="default", process_label="default",
+    )
+    result = security.generate(
+        4688, {"SubjectLogonId": "0xOVERRIDE"}, ctx.host, user, spec_stub, ts,
+        ctx=ctx, session_label="default", process_label="default",
+    )
+    assert result["SubjectLogonId"] == "0xOVERRIDE"
+
+
+def test_no_context_falls_back_to_random(user, ts, spec_stub, host):
+    result = security.generate(
+        4688, {}, host, user, spec_stub, ts,
+        ctx=None, session_label="default", process_label="default",
+    )
+    assert "SubjectLogonId" in result
