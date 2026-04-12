@@ -110,7 +110,7 @@ def test_labeled_process_parent_comes_from_current(ctx):
 
 # ── Security generator integration tests ────────────────────────────────────
 
-from artiforge.generators import security
+from artiforge.generators import security, sysmon
 from datetime import datetime, timezone
 
 
@@ -189,3 +189,80 @@ def test_no_context_falls_back_to_random(user, ts, spec_stub, host):
         ctx=None, session_label="default", process_label="default",
     )
     assert "SubjectLogonId" in result
+
+
+# ── Sysmon correlation integration ───────────────────────────────────────
+
+def test_sysmon1_registers_process_in_context(ctx, user, ts, spec_stub):
+    result = sysmon.generate(
+        1, {"Image": r"C:\Temp\mimikatz.exe"}, ctx.host, user, spec_stub, ts,
+        ctx=ctx, session_label="default", process_label="default",
+    )
+    proc = ctx.get_process("default")
+    assert proc is not None
+    assert proc.process_guid == result["ProcessGuid"]
+    assert proc.process_id == result["ProcessId"]
+    assert proc.image == r"C:\Temp\mimikatz.exe"
+
+
+def test_sysmon1_reads_logon_from_session(ctx, user, ts, spec_stub):
+    security.generate(
+        4624, {}, ctx.host, user, spec_stub, ts,
+        ctx=ctx, session_label="default", process_label="default",
+    )
+    session = ctx.get_session("default")
+    result = sysmon.generate(
+        1, {}, ctx.host, user, spec_stub, ts,
+        ctx=ctx, session_label="default", process_label="default",
+    )
+    assert result["LogonGuid"] == session.logon_guid
+    assert result["LogonId"] == session.logon_id
+
+
+def test_sysmon1_parent_from_prior_process(ctx, user, ts, spec_stub):
+    r1 = sysmon.generate(
+        1, {"Image": r"C:\Windows\System32\cmd.exe"}, ctx.host, user, spec_stub, ts,
+        ctx=ctx, session_label="default", process_label="default",
+    )
+    r2 = sysmon.generate(
+        1, {"Image": r"C:\Temp\mimikatz.exe"}, ctx.host, user, spec_stub, ts,
+        ctx=ctx, session_label="default", process_label="default",
+    )
+    assert r2["ParentProcessGuid"] == r1["ProcessGuid"]
+    assert r2["ParentProcessId"] == r1["ProcessId"]
+    assert r2["ParentImage"] == r"C:\Windows\System32\cmd.exe"
+
+
+def test_sysmon5_reads_process_from_context(ctx, user, ts, spec_stub):
+    r1 = sysmon.generate(
+        1, {"Image": r"C:\Temp\mimikatz.exe"}, ctx.host, user, spec_stub, ts,
+        ctx=ctx, session_label="default", process_label="default",
+    )
+    r5 = sysmon.generate(
+        5, {}, ctx.host, user, spec_stub, ts,
+        ctx=ctx, session_label="default", process_label="default",
+    )
+    assert r5["ProcessGuid"] == r1["ProcessGuid"]
+    assert r5["ProcessId"] == r1["ProcessId"]
+
+
+def test_sysmon3_reads_process_from_context(ctx, user, ts, spec_stub):
+    sysmon.generate(
+        1, {"Image": r"C:\ProgramData\update.exe"}, ctx.host, user, spec_stub, ts,
+        ctx=ctx, session_label="default", process_label="default",
+    )
+    proc = ctx.get_process("default")
+    r3 = sysmon.generate(
+        3, {}, ctx.host, user, spec_stub, ts,
+        ctx=ctx, session_label="default", process_label="default",
+    )
+    assert r3["ProcessGuid"] == proc.process_guid
+    assert r3["ProcessId"] == proc.process_id
+
+
+def test_sysmon_no_context_falls_back(host, user, ts, spec_stub):
+    result = sysmon.generate(
+        1, {}, host, user, spec_stub, ts,
+        ctx=None, session_label="default", process_label="default",
+    )
+    assert "ProcessGuid" in result
