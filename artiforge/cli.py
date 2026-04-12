@@ -168,6 +168,40 @@ def validate(lab: str | None, lab_path: str | None, strict: bool):
                             f"first 4624 at "
                             f"{logon_ts.strftime('%H:%M:%S')}"  # type: ignore[union-attr]
                         )
+
+            # 4. ProcessGuid correlation: Sysmon 5 should match a prior Sysmon 1
+            sysmon1_guids: dict[str, set[str]] = {}
+            for ev in bundle.events:
+                if ev.eid == 1 and ev.channel == "Sysmon" and ev.phase_id != 0:
+                    sysmon1_guids.setdefault(ev.host, set()).add(
+                        ev.event_data.get("ProcessGuid", ""))
+            for ev in bundle.events:
+                if ev.eid == 5 and ev.channel == "Sysmon" and ev.phase_id != 0:
+                    guid = ev.event_data.get("ProcessGuid", "")
+                    host_guids = sysmon1_guids.get(ev.host, set())
+                    if guid and guid not in host_guids:
+                        warnings.append(
+                            f"Phase {ev.phase_id} Sysmon 5 on {ev.host}: "
+                            f"ProcessGuid {guid[:20]}... not produced by any "
+                            f"Sysmon 1 on this host"
+                        )
+
+            # 5. Orphan logoff: 4634 TargetLogonId should match a prior 4624
+            logon_ids: dict[str, set[str]] = {}
+            for ev in bundle.events:
+                if ev.eid == 4624 and ev.phase_id != 0:
+                    logon_ids.setdefault(ev.host, set()).add(
+                        ev.event_data.get("TargetLogonId", ""))
+            for ev in bundle.events:
+                if ev.eid == 4634 and ev.phase_id != 0:
+                    lid = ev.event_data.get("TargetLogonId", "")
+                    host_lids = logon_ids.get(ev.host, set())
+                    if lid and lid not in host_lids:
+                        warnings.append(
+                            f"Phase {ev.phase_id} EID 4634 on {ev.host}: "
+                            f"TargetLogonId {lid} not produced by any 4624 "
+                            f"on this host"
+                        )
         except Exception:
             pass  # strict check is advisory; don't abort on generator errors
 
