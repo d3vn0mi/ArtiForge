@@ -266,3 +266,54 @@ def test_sysmon_no_context_falls_back(host, user, ts, spec_stub):
         ctx=None, session_label="default", process_label="default",
     )
     assert "ProcessGuid" in result
+
+
+# ── End-to-end: UC3 correlation ──────────────────────────────────────────
+
+def test_uc3_logon_id_consistent_within_phase():
+    """All Security events in UC3 phase 1 should share the same SubjectLogonId
+    (they all happen under the marcus.webb session)."""
+    from artiforge.core import engine
+    spec = engine.load_lab("uc3")
+    bundle = engine.run(spec, seed=42)
+
+    # Phase 1 Security events that consume SubjectLogonId
+    p1_security = [
+        e for e in bundle.events
+        if e.phase_id == 1 and e.channel == "Security" and e.eid != 4624
+    ]
+    logon_ids = {e.event_data.get("SubjectLogonId") for e in p1_security}
+    # All should share the same LogonId (from the phase 1 4624)
+    assert len(logon_ids) == 1, f"Expected 1 LogonId in phase 1, got {logon_ids}"
+
+
+def test_uc3_sysmon_process_guid_consistent():
+    """Sysmon events for the same process in phase 1 should share ProcessGuid.
+
+    Only events at or after the first Sysmon 1 (process-create) are checked;
+    file-drop events (EID 11) that precede any process registration fall back
+    to a random GUID by design and are not part of this correlation assertion.
+    """
+    from artiforge.core import engine
+    spec = engine.load_lab("uc3")
+    bundle = engine.run(spec, seed=42)
+
+    p1_sysmon = [
+        e for e in bundle.events
+        if e.phase_id == 1 and e.channel == "Sysmon"
+    ]
+    # Only check events from the first EID 1 onward — before that no process is
+    # registered in the CorrelationContext so ProcessGuid falls back to random.
+    first_eid1_idx = next(i for i, e in enumerate(p1_sysmon) if e.eid == 1)
+    p1_sysmon = p1_sysmon[first_eid1_idx:]
+
+    sysmon1_guids = {
+        e.event_data["ProcessGuid"]
+        for e in p1_sysmon if e.eid == 1
+    }
+    for e in p1_sysmon:
+        if e.eid != 1:
+            assert e.event_data["ProcessGuid"] in sysmon1_guids, (
+                f"Sysmon {e.eid} ProcessGuid {e.event_data['ProcessGuid']} "
+                f"not in any Sysmon 1 ProcessGuid"
+            )
