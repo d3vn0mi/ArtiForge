@@ -16,6 +16,26 @@ def eid_7036(fields: dict, **_) -> dict:
     }
 
 
+# ── EID 7031 — Service Crash ─────────────────────────────────────────────────
+
+def eid_7031(fields: dict, **_) -> dict:
+    return {
+        "param1": fields.get("param1", "WindowsUpdateSvc"),
+        "param2": fields.get("param2", "Restart the service"),
+        "param3": fields.get("param3", "60000"),
+        "param4": fields.get("param4", "1"),
+    }
+
+
+# ── EID 7034 — Service Terminated ─────────────────────────────────────────────
+
+def eid_7034(fields: dict, **_) -> dict:
+    return {
+        "param1": fields.get("param1", "WindowsUpdateSvc"),
+        "param2": fields.get("param2", "1"),
+    }
+
+
 # ── EID 7045 — New Service Installed ──────────────────────────────────────────
 
 def eid_7045(fields: dict, **_) -> dict:
@@ -34,6 +54,8 @@ def eid_7045(fields: dict, **_) -> dict:
 # ── Dispatcher ────────────────────────────────────────────────────────────────
 
 _GENERATORS = {
+    7031: eid_7031,
+    7034: eid_7034,
     7036: eid_7036,
     7045: eid_7045,
 }
