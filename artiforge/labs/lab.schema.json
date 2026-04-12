@@ -18,6 +18,13 @@
           },
           "title": "Phases",
           "type": "array"
+        },
+        "noise": {
+          "items": {
+            "$ref": "#/$defs/NoiseSpec"
+          },
+          "title": "Noise",
+          "type": "array"
         }
       },
       "required": [
@@ -95,6 +102,42 @@
           "minimum": 0,
           "title": "Repeat Gap Seconds",
           "type": "integer"
+        },
+        "jitter_seconds": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Jitter Seconds",
+          "type": "integer"
+        },
+        "repeat_jitter_seconds": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Repeat Jitter Seconds",
+          "type": "integer"
+        },
+        "session": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Session"
+        },
+        "process": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Process"
         }
       },
       "required": [
@@ -247,6 +290,11 @@
           "default": "v18",
           "title": "Mitre Version",
           "type": "string"
+        },
+        "lab_schema_version": {
+          "default": "1",
+          "title": "Lab Schema Version",
+          "type": "string"
         }
       },
       "required": [
@@ -254,6 +302,44 @@
         "name"
       ],
       "title": "LabMeta",
+      "type": "object"
+    },
+    "NoiseSpec": {
+      "description": "Configures background noise events injected into the timeline.",
+      "properties": {
+        "host": {
+          "title": "Host",
+          "type": "string"
+        },
+        "spread_minutes": {
+          "default": 60,
+          "minimum": 1,
+          "title": "Spread Minutes",
+          "type": "integer"
+        },
+        "logon_pairs": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Logon Pairs",
+          "type": "integer"
+        },
+        "process_spawns": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Process Spawns",
+          "type": "integer"
+        },
+        "dns_queries": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Dns Queries",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "host"
+      ],
+      "title": "NoiseSpec",
       "type": "object"
     },
     "Phase": {
@@ -315,6 +401,17 @@
           },
           "title": "File Artifacts",
           "type": "array"
+        },
+        "validation": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ValidationSpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "required": [
@@ -345,6 +442,20 @@
         "domain"
       ],
       "title": "User",
+      "type": "object"
+    },
+    "ValidationSpec": {
+      "description": "Per-phase validation configuration.",
+      "properties": {
+        "suppress": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Suppress",
+          "type": "array"
+        }
+      },
+      "title": "ValidationSpec",
       "type": "object"
     }
   },
