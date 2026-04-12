@@ -13,8 +13,13 @@ EID 14 — RegistryEvent (Key/Value Renamed)
 EID 17 — Pipe Created
 EID 18 — Pipe Connected
 EID 22 — DNS Query
+EID 15 — FileCreateStreamHash (ADS)
+EID 16 — ServiceConfigurationChange
+EID 22 — DNS Query
 EID 23 — FileDelete
+EID 24 — ClipboardChange
 EID 25 — ProcessTampering
+EID 26 — FileDeleteDetected
 """
 
 from __future__ import annotations
@@ -441,6 +446,87 @@ def eid_25(fields: dict, host: Host, user: User | None, timestamp: Any,
     }
 
 
+# ── EID 6 — Driver Loaded ─────────────────────────────────────────────────────
+
+def eid_6(fields: dict, host: Host, user: User | None, timestamp: Any, **_) -> dict:
+    return {
+        "RuleName": fields.get("RuleName", "-"),
+        "UtcTime": format_system_time(timestamp),
+        "ImageLoaded": fields.get("ImageLoaded", r"C:\Windows\System32\drivers\svchost.sys"),
+        "Hashes": fields.get("Hashes", f"MD5={_fake_md5()},SHA256={_fake_sha256()}"),
+        "Signed": fields.get("Signed", "false"),
+        "Signature": fields.get("Signature", "-"),
+        "SignatureStatus": fields.get("SignatureStatus", "Unavailable"),
+    }
+
+
+# ── EID 15 — FileCreateStreamHash (ADS) ──────────────────────────────────────
+
+def eid_15(fields: dict, host: Host, user: User | None, timestamp: Any,
+           ctx=None, process_label: str = "default", **_) -> dict:
+    process_guid, process_id = _resolve_process(fields, ctx, process_label)
+    return {
+        "RuleName": fields.get("RuleName", "-"),
+        "UtcTime": format_system_time(timestamp),
+        "ProcessGuid": process_guid,
+        "ProcessId": process_id,
+        "Image": fields.get("Image", r"C:\Windows\System32\cmd.exe"),
+        "TargetFilename": fields.get("TargetFilename", r"C:\Temp\file.txt:hidden"),
+        "CreationUtcTime": format_system_time(timestamp),
+        "Hash": fields.get("Hash", f"MD5={_fake_md5()},SHA256={_fake_sha256()}"),
+        "Contents": fields.get("Contents", "Binary Data"),
+        "User": fields.get("User", f"{user.domain}\\{user.username}" if user else "NT AUTHORITY\\SYSTEM"),
+    }
+
+
+# ── EID 16 — ServiceConfigurationChange ──────────────────────────────────────
+
+def eid_16(fields: dict, host: Host, user: User | None, timestamp: Any, **_) -> dict:
+    return {
+        "RuleName": fields.get("RuleName", "-"),
+        "UtcTime": format_system_time(timestamp),
+        "Configuration": fields.get("Configuration", r"C:\Windows\SysmonDrv.sys"),
+        "ConfigurationFileHash": fields.get("ConfigurationFileHash", f"SHA256={_fake_sha256()}"),
+    }
+
+
+# ── EID 24 — ClipboardChange ─────────────────────────────────────────────────
+
+def eid_24(fields: dict, host: Host, user: User | None, timestamp: Any,
+           ctx=None, process_label: str = "default", **_) -> dict:
+    process_guid, process_id = _resolve_process(fields, ctx, process_label)
+    return {
+        "RuleName": fields.get("RuleName", "-"),
+        "UtcTime": format_system_time(timestamp),
+        "ProcessGuid": process_guid,
+        "ProcessId": process_id,
+        "Image": fields.get("Image", r"C:\Windows\System32\cmd.exe"),
+        "Session": fields.get("Session", "1"),
+        "ClientInfo": fields.get("ClientInfo", "user session"),
+        "Hashes": fields.get("Hashes", f"MD5={_fake_md5()},SHA256={_fake_sha256()}"),
+        "Archived": fields.get("Archived", "true"),
+        "User": fields.get("User", f"{user.domain}\\{user.username}" if user else "NT AUTHORITY\\SYSTEM"),
+    }
+
+
+# ── EID 26 — FileDeleteDetected ───────────────────────────────────────────────
+
+def eid_26(fields: dict, host: Host, user: User | None, timestamp: Any,
+           ctx=None, process_label: str = "default", **_) -> dict:
+    process_guid, process_id = _resolve_process(fields, ctx, process_label)
+    return {
+        "RuleName": fields.get("RuleName", "-"),
+        "UtcTime": format_system_time(timestamp),
+        "ProcessGuid": process_guid,
+        "ProcessId": process_id,
+        "User": fields.get("User", f"{user.domain}\\{user.username}" if user else "NT AUTHORITY\\SYSTEM"),
+        "Image": fields.get("Image", r"C:\Windows\System32\cmd.exe"),
+        "TargetFilename": fields.get("TargetFilename", r"C:\Temp\payload.exe"),
+        "Hashes": fields.get("Hashes", f"MD5={_fake_md5()},SHA256={_fake_sha256()}"),
+        "IsExecutable": fields.get("IsExecutable", "true"),
+    }
+
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _fake_md5() -> str:
@@ -457,6 +543,7 @@ _GENERATORS = {
     1:  eid_1,
     3:  eid_3,
     5:  eid_5,
+    6:  eid_6,
     7:  eid_7,
     8:  eid_8,
     10: eid_10,
@@ -464,11 +551,15 @@ _GENERATORS = {
     12: eid_12,
     13: eid_13,
     14: eid_14,
+    15: eid_15,
+    16: eid_16,
     17: eid_17,
     18: eid_18,
     22: eid_22,
     23: eid_23,
+    24: eid_24,
     25: eid_25,
+    26: eid_26,
 }
 
 
