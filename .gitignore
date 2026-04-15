@@ -8,3 +8,4 @@ artifacts/
 test_out/
 *.ndjson
 .worktrees/
+reports/
