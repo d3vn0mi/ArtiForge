@@ -25,6 +25,11 @@
           },
           "title": "Noise",
           "type": "array"
+        },
+        "forensic_artifacts": {
+          "default": false,
+          "title": "Forensic Artifacts",
+          "type": "boolean"
         }
       },
       "required": [

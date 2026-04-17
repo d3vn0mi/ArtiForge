@@ -312,3 +312,42 @@ def test_attack_spec_forensic_artifacts_true():
     a = AttackSpec(base_time=datetime(2026, 1, 1, tzinfo=timezone.utc),
                    forensic_artifacts=True)
     assert a.forensic_artifacts is True
+
+
+def test_generate_full_produces_correlated_artifacts(tmp_path):
+    """Prefetch, Amcache, $MFT should reference the same executables."""
+    from artiforge.generators.forensic_artifacts import generate
+    events = [
+        _make_sysmon1(r"C:\Temp\mimikatz.exe", host="WIN-WS1"),
+        _make_sysmon1(r"C:\Windows\System32\cmd.exe", host="WIN-WS1", record_id=1001),
+    ]
+    bundle = ArtifactBundle(
+        lab_id="test", lab_name="Test",
+        base_time=datetime(2026, 2, 19, 9, 0, 0, tzinfo=timezone.utc),
+        events=events)
+    files = generate(bundle, tmp_path)
+
+    assert len(files) == 4  # 2 prefetch + 1 amcache + 1 mft
+
+    pf_files = [f for f in files if f.suffix == ".pf"]
+    assert len(pf_files) == 2
+
+    amcache_files = [f for f in files if f.name == "amcache_entries.json"]
+    assert len(amcache_files) == 1
+    amcache = json.loads(amcache_files[0].read_text())
+    amcache_paths = {e["full_path"] for e in amcache}
+    assert r"C:\Temp\mimikatz.exe" in amcache_paths
+    assert r"C:\Windows\System32\cmd.exe" in amcache_paths
+
+    mft_files = [f for f in files if f.name == "mft_entries.json"]
+    assert len(mft_files) == 1
+    mft = json.loads(mft_files[0].read_text())
+    mft_names = {e["filename"] for e in mft}
+    assert "mimikatz.exe" in mft_names
+    assert "cmd.exe" in mft_names
+
+
+def test_uc3_no_forensic_artifacts_by_default():
+    from artiforge.core import engine
+    spec = engine.load_lab("uc3")
+    assert spec.attack.forensic_artifacts is False
