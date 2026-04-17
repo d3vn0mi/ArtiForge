@@ -157,3 +157,90 @@ def test_dispatch_unknown_channel_raises(linux_host, linux_user, ts, spec_stub):
             fields={}, host=linux_host, user=linux_user,
             spec=spec_stub, timestamp=ts,
         )
+
+
+from artiforge.core.models import ArtifactBundle, GeneratedEvent
+
+
+def _make_auditd_event(eid, event_data, host="LNX-WEB1", record_id=1000, ts=None):
+    if ts is None:
+        ts = datetime(2026, 2, 19, 9, 12, 0, tzinfo=timezone.utc)
+    return GeneratedEvent(
+        record_id=record_id, timestamp=ts, channel="Auditd", eid=eid,
+        host=host, computer="lnx-web1.lab.local",
+        provider_name="auditd", provider_guid="",
+        event_data=event_data, phase_id=1, phase_name="test",
+    )
+
+
+def test_auditd_exporter_creates_file(tmp_path):
+    from artiforge.exporters.auditd_exporter import export
+    bundle = ArtifactBundle(
+        lab_id="test", lab_name="Test",
+        base_time=datetime(2026, 2, 19, 9, 0, 0, tzinfo=timezone.utc),
+        events=[
+            _make_auditd_event(1300, {"arch": "c000003e", "syscall": "59",
+                                       "exe": "/usr/bin/bash", "pid": "5678",
+                                       "uid": "0", "success": "yes"}),
+        ],
+    )
+    files = export(bundle, tmp_path)
+    assert len(files) == 1
+    assert files[0].name == "LNX-WEB1_audit.log"
+    assert files[0].exists()
+
+
+def test_auditd_exporter_format(tmp_path):
+    from artiforge.exporters.auditd_exporter import export
+    bundle = ArtifactBundle(
+        lab_id="test", lab_name="Test",
+        base_time=datetime(2026, 2, 19, 9, 0, 0, tzinfo=timezone.utc),
+        events=[
+            _make_auditd_event(1300, {"arch": "c000003e", "syscall": "59",
+                                       "exe": "/usr/bin/bash", "pid": "5678",
+                                       "uid": "0", "success": "yes"}),
+        ],
+    )
+    export(bundle, tmp_path)
+    content = (tmp_path / "LNX-WEB1_audit.log").read_text()
+    assert "type=SYSCALL" in content
+    assert "msg=audit(" in content
+    assert "arch=c000003e" in content
+    assert "exe=/usr/bin/bash" in content
+
+
+def test_auditd_exporter_skips_windows_events(tmp_path):
+    from artiforge.exporters.auditd_exporter import export
+    bundle = ArtifactBundle(
+        lab_id="test", lab_name="Test",
+        base_time=datetime(2026, 2, 19, 9, 0, 0, tzinfo=timezone.utc),
+        events=[
+            GeneratedEvent(
+                record_id=1, timestamp=datetime(2026, 2, 19, 9, 0, 0, tzinfo=timezone.utc),
+                channel="Security", eid=4624, host="WIN-WS1",
+                computer="WIN-WS1.lab.local",
+                provider_name="Microsoft-Windows-Security-Auditing",
+                provider_guid="{54849625}", event_data={"TargetUserName": "admin"},
+                phase_id=1, phase_name="test",
+            ),
+        ],
+    )
+    files = export(bundle, tmp_path)
+    assert len(files) == 0
+
+
+def test_auditd_exporter_one_file_per_host(tmp_path):
+    from artiforge.exporters.auditd_exporter import export
+    bundle = ArtifactBundle(
+        lab_id="test", lab_name="Test",
+        base_time=datetime(2026, 2, 19, 9, 0, 0, tzinfo=timezone.utc),
+        events=[
+            _make_auditd_event(1300, {"exe": "/usr/bin/bash"}, host="LNX-WEB1"),
+            _make_auditd_event(1100, {"msg": "test", "pid": "1", "uid": "0", "auid": "1000", "ses": "1"}, host="LNX-DB1", record_id=1001),
+        ],
+    )
+    files = export(bundle, tmp_path)
+    assert len(files) == 2
+    names = {f.name for f in files}
+    assert "LNX-WEB1_audit.log" in names
+    assert "LNX-DB1_audit.log" in names
