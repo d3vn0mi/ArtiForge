@@ -334,6 +334,48 @@
           "minimum": 0,
           "title": "Dns Queries",
           "type": "integer"
+        },
+        "file_operations": {
+          "default": 0,
+          "minimum": 0,
+          "title": "File Operations",
+          "type": "integer"
+        },
+        "registry_operations": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Registry Operations",
+          "type": "integer"
+        },
+        "service_changes": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Service Changes",
+          "type": "integer"
+        },
+        "network_connections": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Network Connections",
+          "type": "integer"
+        },
+        "windows_updates": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Windows Updates",
+          "type": "integer"
+        },
+        "noise_profile": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Noise Profile"
         }
       },
       "required": [

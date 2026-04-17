@@ -244,3 +244,15 @@ def test_generate_events_sorted_by_timestamp(host):
     events = generate(spec, host, base, 1000)
     timestamps = [ev.timestamp for ev in events]
     assert timestamps == sorted(timestamps)
+
+
+def test_uc3n_backward_compat():
+    """UC3N with existing noise spec produces same event types as before."""
+    from artiforge.core import engine
+    spec = engine.load_lab("uc3n")
+    bundle = engine.run(spec, seed=42)
+    noise_events = [e for e in bundle.events if e.phase_id == 0]
+    assert len(noise_events) > 0
+    assert all(e.phase_name == "noise" for e in noise_events)
+    attack_events = [e for e in bundle.events if e.phase_id != 0]
+    assert len(attack_events) == 40
