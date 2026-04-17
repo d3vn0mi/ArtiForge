@@ -1,0 +1,17 @@
+title: Suspicious Service Installation
+id: a1b2c3d4-0002-0002-0002-000000000002
+status: stable
+description: Detects installation of services with suspicious characteristics
+logsource:
+    product: windows
+    service: system
+detection:
+    selection:
+        EventID: '7045'
+    filter:
+        ServiceName|startswith: 'Windows'
+    condition: selection and not filter
+level: medium
+tags:
+    - attack.persistence
+    - attack.t1543.003
