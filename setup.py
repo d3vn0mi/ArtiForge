@@ -30,6 +30,7 @@ setup(
         "click>=8.1",
         "pyyaml>=6.0",
         "pydantic>=2.0",
+        "evtxforge",
     ],
     extras_require={
         "web": ["flask>=2.3"],
