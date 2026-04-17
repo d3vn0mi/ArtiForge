@@ -277,3 +277,14 @@ def test_cli_format_includes_auditd():
     runner = CliRunner()
     result = runner.invoke(main, ["generate", "--help"])
     assert "auditd" in result.output
+
+
+def test_uc3_unaffected_by_platform_field():
+    """Existing UC3 lab (all Windows hosts) should work unchanged."""
+    from artiforge.core import engine
+    spec = engine.load_lab("uc3")
+    bundle = engine.run(spec, seed=42)
+    assert len(bundle.events) == 40
+    channels = {ev.channel for ev in bundle.events}
+    assert "Auditd" not in channels
+    assert "Security" in channels
