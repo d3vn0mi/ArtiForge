@@ -195,10 +195,10 @@ Better guardrails for scenario authors.
 
 ---
 
-## v1.0 — Filesystem Artifacts, Scenario Library & Distribution
+## v1.0 — Filesystem Artifact Generation
 
-A standalone tool is useful; a curated library backed by forensic-grade
-artifacts is a training platform.
+Cross-artifact correlation: event logs tell one story, filesystem artifacts
+confirm it. Trainees learn to corroborate findings across evidence sources.
 
 ### Filesystem Artifact Generation
 - [ ] Prefetch files (`.pf`) with execution counts, timestamps, and referenced
@@ -208,21 +208,6 @@ artifacts is a training platform.
   attack-path files
 - [ ] Cross-artifact correlation: if Sysmon 1 says `mimikatz.exe` ran, the
   Prefetch and Amcache entries confirm it
-
-### Scenario Library
-- [ ] UC4 — Kerberoasting + Pass-the-Hash lateral movement
-- [ ] UC5 — Supply chain: malicious npm package → C2 beacon
-- [ ] UC6 — Ransomware: file encryption + shadow copy deletion
-- [ ] UC7 — Insider threat: data staging + USB exfiltration
-- [ ] UC8 — Living-off-the-land: wmic/mshta/regsvr32 chains
-- [ ] UC9 — Cloud pivot: IMDS credential theft + lateral to S3
-- [ ] UC10 — Active Directory: DCSync + Golden Ticket
-
-### Distribution
-- [ ] PyPI package (`pip install artiforge`)
-- [ ] GitHub Actions CI: test matrix across Python 3.10/3.11/3.12
-- [ ] Pre-built Docker image on GitHub Container Registry (`ghcr.io/d3vn0mi/artiforge`)
-- [ ] Signed releases with checksums
 
 ---
 
@@ -240,6 +225,11 @@ Items deferred from earlier milestones. Will be prioritized as needed.
   session state across phases (deferred from v0.7)
 - [ ] **Template-based BinXML** in evtxforge — for python-evtx readback
   compatibility (current inline BinXML works with Chainsaw/Hayabusa)
+- [ ] **Scenario Library** — UC4 (Kerberoasting), UC5 (Supply Chain),
+  UC6 (Ransomware), UC7 (Insider Threat), UC8 (LOLBins), UC9 (Cloud Pivot),
+  UC10 (AD: DCSync + Golden Ticket)
+- [ ] **Distribution** — PyPI package, GitHub Actions CI, pre-built Docker
+  image on GHCR, signed releases
 
 ---
 
