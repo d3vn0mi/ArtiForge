@@ -67,6 +67,12 @@ class NoiseSpec(BaseModel):
     logon_pairs: int = Field(default=0, ge=0)
     process_spawns: int = Field(default=0, ge=0)
     dns_queries: int = Field(default=0, ge=0)
+    file_operations: int = Field(default=0, ge=0)
+    registry_operations: int = Field(default=0, ge=0)
+    service_changes: int = Field(default=0, ge=0)
+    network_connections: int = Field(default=0, ge=0)
+    windows_updates: int = Field(default=0, ge=0)
+    noise_profile: str | None = None
 
 
 # ── Attack specification ───────────────────────────────────────────────────────
