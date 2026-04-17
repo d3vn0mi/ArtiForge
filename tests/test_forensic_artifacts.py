@@ -225,3 +225,77 @@ def test_amcache_uses_sha1_from_hashes(tmp_path):
     path = generate_amcache(infos, tmp_path)
     entries = json.loads(path.read_text())
     assert entries[0]["sha1"] == "DA39A3EE5E6B"
+
+
+def test_mft_creates_json(tmp_path):
+    from artiforge.generators.mft import generate_mft
+    from artiforge.generators.forensic_artifacts import ProcessInfo
+    infos = [ProcessInfo(
+        image_path=r"C:\Temp\mimikatz.exe", image_name="mimikatz.exe",
+        parent_dir=r"C:\Temp",
+        first_run=datetime(2026, 2, 19, 9, 15, 0, tzinfo=timezone.utc),
+        run_count=1, hashes={}, file_version="", original_filename="",
+        company="", host="WIN-WS1")]
+    path = generate_mft(infos, tmp_path)
+    assert path.exists()
+    assert path.name == "mft_entries.json"
+
+
+def test_mft_json_structure(tmp_path):
+    from artiforge.generators.mft import generate_mft
+    from artiforge.generators.forensic_artifacts import ProcessInfo
+    infos = [ProcessInfo(
+        image_path=r"C:\Temp\mimikatz.exe", image_name="mimikatz.exe",
+        parent_dir=r"C:\Temp",
+        first_run=datetime(2026, 2, 19, 9, 15, 0, tzinfo=timezone.utc),
+        run_count=1, hashes={}, file_version="", original_filename="",
+        company="", host="WIN-WS1")]
+    path = generate_mft(infos, tmp_path)
+    entries = json.loads(path.read_text())
+    assert isinstance(entries, list)
+    assert len(entries) == 1
+    entry = entries[0]
+    assert entry["filename"] == "mimikatz.exe"
+    assert entry["parent_directory"] == r"C:\Temp"
+    assert "created" in entry
+    assert "modified" in entry
+    assert "accessed" in entry
+    assert "entry_modified" in entry
+    assert entry["is_directory"] is False
+    assert entry["in_use"] is True
+    assert "record_number" in entry
+
+
+def test_mft_record_numbers_unique(tmp_path):
+    from artiforge.generators.mft import generate_mft
+    from artiforge.generators.forensic_artifacts import ProcessInfo
+    infos = [
+        ProcessInfo(image_path=r"C:\Temp\a.exe", image_name="a.exe",
+                     parent_dir=r"C:\Temp",
+                     first_run=datetime(2026, 1, 1, tzinfo=timezone.utc),
+                     run_count=1, hashes={}, file_version="",
+                     original_filename="", company="", host="WIN-WS1"),
+        ProcessInfo(image_path=r"C:\Temp\b.exe", image_name="b.exe",
+                     parent_dir=r"C:\Temp",
+                     first_run=datetime(2026, 1, 1, tzinfo=timezone.utc),
+                     run_count=1, hashes={}, file_version="",
+                     original_filename="", company="", host="WIN-WS1"),
+    ]
+    path = generate_mft(infos, tmp_path)
+    entries = json.loads(path.read_text())
+    record_nums = [e["record_number"] for e in entries]
+    assert len(record_nums) == len(set(record_nums))
+
+
+def test_mft_accessed_matches_first_run(tmp_path):
+    from artiforge.generators.mft import generate_mft
+    from artiforge.generators.forensic_artifacts import ProcessInfo
+    first_run = datetime(2026, 2, 19, 9, 15, 5, tzinfo=timezone.utc)
+    infos = [ProcessInfo(
+        image_path=r"C:\Temp\tool.exe", image_name="tool.exe",
+        parent_dir=r"C:\Temp", first_run=first_run,
+        run_count=1, hashes={}, file_version="",
+        original_filename="", company="", host="WIN-WS1")]
+    path = generate_mft(infos, tmp_path)
+    entries = json.loads(path.read_text())
+    assert entries[0]["accessed"] == "2026-02-19T09:15:05Z"
