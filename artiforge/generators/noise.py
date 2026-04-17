@@ -294,6 +294,135 @@ def dns_query(
     return _make_event(record_id, ts, "Sysmon", 22, host, _SYSMON_PROVIDER, event_data)
 
 
+# ── File targets for noise ───────────────────────────────────────────────
+
+_FILE_TARGETS = [
+    (r"C:\Users\{user}\AppData\Local\Temp\tmp{rand}.tmp",
+     r"C:\Windows\System32\svchost.exe"),
+    (r"C:\Users\{user}\Downloads\document_{rand}.pdf",
+     r"C:\Program Files\Google\Chrome\Application\chrome.exe"),
+    (r"C:\Windows\Prefetch\CHROME.EXE-{rand}.pf",
+     r"C:\Windows\System32\svchost.exe"),
+    (r"C:\Users\{user}\AppData\Local\Microsoft\Office\16.0\OfficeFileCache\{rand}.dat",
+     r"C:\Program Files\Microsoft Office\root\Office16\WINWORD.EXE"),
+    (r"C:\Users\{user}\AppData\Local\Temp\{rand}.log",
+     r"C:\Windows\System32\taskhostw.exe"),
+]
+
+_REGISTRY_TARGETS = [
+    (r"HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\UserAssist\{rand}\Count",
+     r"C:\Windows\explorer.exe"),
+    (r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\PackageIndex\{rand}",
+     r"C:\Windows\System32\svchost.exe"),
+    (r"HKCU\Software\Microsoft\Office\16.0\Common\General\RecentFiles",
+     r"C:\Program Files\Microsoft Office\root\Office16\WINWORD.EXE"),
+    (r"HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Notifications\Data\{rand}",
+     r"C:\Windows\System32\svchost.exe"),
+    (r"HKCU\Software\Microsoft\Windows\CurrentVersion\Search\JumplistData",
+     r"C:\Windows\System32\SearchIndexer.exe"),
+]
+
+_SERVICES = [
+    "Spooler", "Themes", "WSearch", "wuauserv", "BITS", "Winmgmt",
+    "Schedule", "W32Time", "EventLog", "CryptSvc",
+]
+
+_NETWORK_DESTINATIONS = [
+    ("13.107.4.52", "microsoft.com"),
+    ("20.190.128.17", "login.microsoftonline.com"),
+    ("142.250.80.100", "www.google.com"),
+    ("23.203.6.136", "www.microsoft.com"),
+    ("104.16.132.229", "cdnjs.cloudflare.com"),
+    ("20.231.239.246", "graph.microsoft.com"),
+    ("52.114.128.40", "teams.microsoft.com"),
+    ("204.79.197.200", "www.bing.com"),
+]
+
+_NETWORK_PROCESSES = [
+    r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+    r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+    r"C:\Windows\System32\svchost.exe",
+    r"C:\Windows\System32\MsMpEng.exe",
+]
+
+_SYSTEM_PROVIDER = ("Service Control Manager", "{555908d1-a6d7-4695-8e1e-26931d2012f4}")
+
+
+def _rand_hex(n: int = 8) -> str:
+    return ''.join(f'{random.getrandbits(8):02X}' for _ in range(n))
+
+
+def file_operation(host, user, ts, record_id):
+    """Sysmon EID 11 — benign file create."""
+    target_template, image = random.choice(_FILE_TARGETS)
+    target = target_template.format(user=user.username, rand=_rand_hex(4))
+    event_data = {
+        "RuleName": "-",
+        "UtcTime": format_system_time(ts),
+        "ProcessGuid": _guid(),
+        "ProcessId": _pid(),
+        "Image": image,
+        "TargetFilename": target,
+        "CreationUtcTime": format_system_time(ts),
+        "User": user.full,
+    }
+    return _make_event(record_id, ts, "Sysmon", 11, host, _SYSMON_PROVIDER, event_data)
+
+
+def registry_operation(host, user, ts, record_id):
+    """Sysmon EID 13 — benign registry value set."""
+    target_template, image = random.choice(_REGISTRY_TARGETS)
+    target = target_template.format(rand=_rand_hex(4))
+    event_data = {
+        "RuleName": "-",
+        "EventType": "SetValue",
+        "UtcTime": format_system_time(ts),
+        "ProcessGuid": _guid(),
+        "ProcessId": _pid(),
+        "Image": image,
+        "TargetObject": target,
+        "Details": "Binary Data",
+        "User": user.full,
+    }
+    return _make_event(record_id, ts, "Sysmon", 13, host, _SYSMON_PROVIDER, event_data)
+
+
+def service_change(host, user, ts, record_id):
+    """System EID 7036 — benign service state change."""
+    service = random.choice(_SERVICES)
+    state = random.choices(["running", "stopped"], weights=[80, 20], k=1)[0]
+    event_data = {"param1": service, "param2": state}
+    return _make_event(record_id, ts, "System", 7036, host, _SYSTEM_PROVIDER, event_data)
+
+
+def network_connection(host, user, ts, record_id):
+    """Sysmon EID 3 — benign outbound HTTPS connection."""
+    dest_ip, dest_host = random.choice(_NETWORK_DESTINATIONS)
+    image = random.choice(_NETWORK_PROCESSES)
+    port = random.choices(["443", "80"], weights=[90, 10], k=1)[0]
+    event_data = {
+        "RuleName": "-",
+        "UtcTime": format_system_time(ts),
+        "ProcessGuid": _guid(),
+        "ProcessId": _pid(),
+        "Image": image,
+        "User": user.full,
+        "Protocol": "tcp",
+        "Initiated": "true",
+        "SourceIsIpv6": "false",
+        "SourceIp": host.ip,
+        "SourceHostname": host.fqdn,
+        "SourcePort": str(random.randint(49152, 65535)),
+        "SourcePortName": "-",
+        "DestinationIsIpv6": "false",
+        "DestinationIp": dest_ip,
+        "DestinationHostname": dest_host,
+        "DestinationPort": port,
+        "DestinationPortName": "https" if port == "443" else "http",
+    }
+    return _make_event(record_id, ts, "Sysmon", 3, host, _SYSMON_PROVIDER, event_data)
+
+
 # ── Noise injection orchestrator ──────────────────────────────────────────────
 
 def generate(

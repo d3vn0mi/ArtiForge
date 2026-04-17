@@ -96,3 +96,64 @@ def test_sample_timestamp_office_hours_biased():
     morning = sum(1 for ts in timestamps if 480 <= (ts - base).total_seconds() / 60 < 720)
     night = sum(1 for ts in timestamps if (ts - base).total_seconds() / 60 < 360)
     assert morning > night * 2
+
+
+from artiforge.core.models import Host, User
+
+
+@pytest.fixture
+def host():
+    return Host(name="WIN-WS1", ip="10.10.10.10", fqdn="WIN-WS1.lab.local",
+                sid_prefix="S-1-5-21-111-222-333",
+                users=[User(username="marcus.webb", domain="LAB", rid=1001)])
+
+
+@pytest.fixture
+def user():
+    return User(username="marcus.webb", domain="LAB", rid=1001)
+
+
+@pytest.fixture
+def ts():
+    return datetime(2026, 2, 19, 9, 12, 0, tzinfo=timezone.utc)
+
+
+def test_file_operation_produces_sysmon11(host, user, ts):
+    from artiforge.generators.noise import file_operation
+    ev = file_operation(host, user, ts, 1000)
+    assert ev.channel == "Sysmon"
+    assert ev.eid == 11
+    assert ev.phase_id == 0
+    assert "TargetFilename" in ev.event_data
+    assert "Image" in ev.event_data
+
+
+def test_registry_operation_produces_sysmon13(host, user, ts):
+    from artiforge.generators.noise import registry_operation
+    ev = registry_operation(host, user, ts, 1000)
+    assert ev.channel == "Sysmon"
+    assert ev.eid == 13
+    assert ev.phase_id == 0
+    assert "TargetObject" in ev.event_data
+    assert "EventType" in ev.event_data
+
+
+def test_service_change_produces_system7036(host, user, ts):
+    from artiforge.generators.noise import service_change
+    ev = service_change(host, user, ts, 1000)
+    assert ev.channel == "System"
+    assert ev.eid == 7036
+    assert ev.phase_id == 0
+    assert "param1" in ev.event_data
+    assert "param2" in ev.event_data
+
+
+def test_network_connection_produces_sysmon3(host, user, ts):
+    from artiforge.generators.noise import network_connection
+    ev = network_connection(host, user, ts, 1000)
+    assert ev.channel == "Sysmon"
+    assert ev.eid == 3
+    assert ev.phase_id == 0
+    assert "DestinationIp" in ev.event_data
+    assert "DestinationPort" in ev.event_data
+    assert "SourceIp" in ev.event_data
