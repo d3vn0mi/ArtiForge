@@ -299,3 +299,16 @@ def test_mft_accessed_matches_first_run(tmp_path):
     path = generate_mft(infos, tmp_path)
     entries = json.loads(path.read_text())
     assert entries[0]["accessed"] == "2026-02-19T09:15:05Z"
+
+
+def test_attack_spec_forensic_artifacts_default_false():
+    from artiforge.core.models import AttackSpec
+    a = AttackSpec(base_time=datetime(2026, 1, 1, tzinfo=timezone.utc))
+    assert a.forensic_artifacts is False
+
+
+def test_attack_spec_forensic_artifacts_true():
+    from artiforge.core.models import AttackSpec
+    a = AttackSpec(base_time=datetime(2026, 1, 1, tzinfo=timezone.utc),
+                   forensic_artifacts=True)
+    assert a.forensic_artifacts is True

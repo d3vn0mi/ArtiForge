@@ -126,6 +126,7 @@ class AttackSpec(BaseModel):
     malicious_account: str = "svc_backup_admin"
     phases: list[Phase] = Field(default_factory=list)
     noise: list[NoiseSpec] = Field(default_factory=list)
+    forensic_artifacts: bool = False
 
 
 class LabMeta(BaseModel):

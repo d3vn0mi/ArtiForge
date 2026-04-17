@@ -506,6 +506,15 @@ def generate(lab: str | None, lab_path: str | None, output: str, fmt: str,
         file_count = len(bundle.files)
         click.echo(f"  [files]   → {run_dir / 'files'}  ({file_count} artifacts)")
 
+    # ── Forensic artifacts (Prefetch, Amcache, $MFT)
+    if spec.attack.forensic_artifacts:
+        from artiforge.generators import forensic_artifacts
+        forensics_dir = run_dir / "forensics"
+        forensic_files = forensic_artifacts.generate(bundle, forensics_dir)
+        if forensic_files:
+            written.extend(forensic_files)
+            click.echo(f"  [forensics] → {forensics_dir}  ({len(forensic_files)} artifacts)")
+
     # ── Summary
     total_events = len(bundle.events)
     click.echo(f"\n  Summary: {total_events} events generated")
