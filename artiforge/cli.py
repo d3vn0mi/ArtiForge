@@ -666,7 +666,12 @@ def coverage():
               help="RNG seed for deterministic generation")
 @click.option("--jitter", default=0, type=int,
               help="Global ±N second timestamp jitter")
-def check(lab: str | None, lab_path: str | None, seed: int | None, jitter: int):
+@click.option("--sigma-dir", default=None, type=click.Path(),
+              help="Load additional Sigma rules from this directory")
+@click.option("--sigma-only", is_flag=True, default=False,
+              help="Only evaluate Sigma rules (skip built-in rules)")
+def check(lab: str | None, lab_path: str | None, seed: int | None, jitter: int,
+          sigma_dir, sigma_only):
     """Run built-in detection rules against a generated bundle and report coverage."""
     if not lab and not lab_path:
         click.echo("Error: provide --lab <id> or --lab-path <path>", err=True)
@@ -685,38 +690,82 @@ def check(lab: str | None, lab_path: str | None, seed: int | None, jitter: int):
         sys.exit(1)
 
     from artiforge.detectors import RULES, run_rules
-    results = run_rules(bundle)
+    from artiforge.detectors.sigma_loader import load_sigma_dir as _load_sigma_dir
+    from artiforge.detectors.sigma_evaluator import evaluate_rule
+
     attack_count = sum(1 for e in bundle.events if e.phase_id != 0)
-    fired_count = sum(1 for r in results if r["fired"])
 
     click.echo(f"\n[ArtiForge] Checking lab: {spec.lab.name}")
-    click.echo(f"  {len(RULES)} rules  ·  {attack_count} attack events  ·  {len(bundle.events)} total\n")
+    click.echo(f"  {attack_count} attack events  ·  {len(bundle.events)} total\n")
 
-    id_w    = max(len(r["rule"].id)        for r in results)
-    name_w  = max(len(r["rule"].name)      for r in results)
-    tech_w  = max(len(r["rule"].technique) for r in results)
+    # ── Built-in rules
+    if not sigma_only:
+        results = run_rules(bundle)
+        fired_count = sum(1 for r in results if r["fired"])
 
-    for r in results:
-        rule    = r["rule"]
-        fired   = r["fired"]
-        count   = len(r["matches"])
-        status  = "FIRED" if fired else "NOT  "
-        noun    = "event" if count == 1 else "events"
-        click.echo(
-            f"  {status}  {rule.id:<{id_w}}  "
-            f"{rule.name:<{name_w}}  "
-            f"{rule.technique:<{tech_w}}  "
-            f"({count} {noun})"
-        )
+        id_w    = max(len(r["rule"].id)        for r in results)
+        name_w  = max(len(r["rule"].name)      for r in results)
+        tech_w  = max(len(r["rule"].technique) for r in results)
 
-    pct = fired_count / len(RULES) * 100
-    click.echo(f"\n  Coverage: {fired_count}/{len(RULES)} rules fired ({pct:.1f}%)")
-    if fired_count == 0:
-        click.echo("  ⚠  No rules fired — the attack chain may not be detectable.")
-    elif fired_count == len(RULES):
-        click.echo("  Lab covers all built-in detection techniques.")
-    else:
-        click.echo("  Lab is detectable. Add events to cover unfired rules.")
+        click.echo("  Built-in rules:")
+        for r in results:
+            rule    = r["rule"]
+            fired   = r["fired"]
+            count   = len(r["matches"])
+            status  = "FIRED" if fired else "NOT  "
+            noun    = "event" if count == 1 else "events"
+            click.echo(
+                f"  {status}  {rule.id:<{id_w}}  "
+                f"{rule.name:<{name_w}}  "
+                f"{rule.technique:<{tech_w}}  "
+                f"({count} {noun})"
+            )
+        pct = fired_count / len(RULES) * 100
+        click.echo(f"  Coverage: {fired_count}/{len(RULES)} rules fired ({pct:.1f}%)\n")
+
+    # ── Sigma rules
+    sigma_rules = []
+
+    # Auto-discover from lab directory
+    lab_sigma_dir = Path(__file__).parent / "labs" / spec.lab.id / "sigma"
+    if lab_sigma_dir.is_dir():
+        sigma_rules.extend(_load_sigma_dir(lab_sigma_dir))
+
+    # External --sigma-dir
+    if sigma_dir:
+        sigma_rules.extend(_load_sigma_dir(Path(sigma_dir)))
+
+    if sigma_rules:
+        sigma_results = []
+        for sr in sigma_rules:
+            matches = evaluate_rule(sr, bundle.events)
+            mitre = ", ".join(sr.mitre_ids) if sr.mitre_ids else "-"
+            sigma_results.append({
+                "rule": sr, "fired": bool(matches),
+                "matches": matches, "mitre": mitre,
+            })
+
+        name_w = max(len(r["rule"].title) for r in sigma_results)
+        tech_w = max(len(r["mitre"]) for r in sigma_results)
+        fired_s = sum(1 for r in sigma_results if r["fired"])
+
+        click.echo("  Sigma rules:")
+        for r in sigma_results:
+            fired  = r["fired"]
+            count  = len(r["matches"])
+            status = "FIRED" if fired else "NOT  "
+            noun   = "event" if count == 1 else "events"
+            click.echo(
+                f"  {status}  [sigma]  "
+                f"{r['rule'].title:<{name_w}}  "
+                f"{r['mitre']:<{tech_w}}  "
+                f"({count} {noun})"
+            )
+        pct_s = fired_s / len(sigma_rules) * 100
+        click.echo(f"  Coverage: {fired_s}/{len(sigma_rules)} rules fired ({pct_s:.1f}%)")
+    elif sigma_only:
+        click.echo("  No Sigma rules found.")
+
     click.echo()
 
 

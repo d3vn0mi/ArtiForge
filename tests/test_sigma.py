@@ -359,3 +359,61 @@ def test_evaluator_excludes_noise():
     matches = evaluate_rule(rule, events)
     assert len(matches) == 1
     assert matches[0].phase_id == 1
+
+
+# ── CLI integration tests ──────────────────────────────────────────────────────
+
+from click.testing import CliRunner
+from artiforge.cli import main
+
+
+@pytest.fixture
+def runner():
+    return CliRunner()
+
+
+def test_check_auto_discovers_sigma_rules(runner):
+    result = runner.invoke(main, ["check", "--lab", "uc3", "--seed", "42"])
+    assert result.exit_code == 0
+    assert "Sigma rules" in result.output
+
+
+def test_check_sigma_only(runner):
+    result = runner.invoke(main, ["check", "--lab", "uc3", "--seed", "42", "--sigma-only"])
+    assert result.exit_code == 0
+    assert "Built-in rules" not in result.output
+    assert "Sigma rules" in result.output
+
+
+def test_check_sigma_dir(runner, tmp_path):
+    _write_sigma(tmp_path, "rule.yml", _valid_sigma())
+    result = runner.invoke(main, [
+        "check", "--lab", "uc3", "--seed", "42",
+        "--sigma-dir", str(tmp_path),
+    ])
+    assert result.exit_code == 0
+    assert "Sigma rules" in result.output
+
+
+def test_uc3_sigma_lolbin_fires():
+    from artiforge.core import engine
+    from artiforge.detectors.sigma_loader import load_sigma_dir
+    from artiforge.detectors.sigma_evaluator import evaluate_rule
+    spec = engine.load_lab("uc3")
+    bundle = engine.run(spec, seed=42)
+    rules = load_sigma_dir(Path("artiforge/labs/uc3/sigma"))
+    lolbin = [r for r in rules if "LOLBin" in r.title][0]
+    matches = evaluate_rule(lolbin, bundle.events)
+    assert len(matches) >= 1
+
+
+def test_uc3_sigma_cloudflared_fires():
+    from artiforge.core import engine
+    from artiforge.detectors.sigma_loader import load_sigma_dir
+    from artiforge.detectors.sigma_evaluator import evaluate_rule
+    spec = engine.load_lab("uc3")
+    bundle = engine.run(spec, seed=42)
+    rules = load_sigma_dir(Path("artiforge/labs/uc3/sigma"))
+    tunnel = [r for r in rules if "Cloudflared" in r.title][0]
+    matches = evaluate_rule(tunnel, bundle.events)
+    assert len(matches) >= 1
