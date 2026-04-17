@@ -1,0 +1,14 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "evtxforge"
+version = "0.1.0"
+description = "Pure-Python library for writing Windows EVTX binary event log files."
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [{name = "D3vn0mi"}]
+
+[project.optional-dependencies]
+test = ["pytest>=7.0"]
