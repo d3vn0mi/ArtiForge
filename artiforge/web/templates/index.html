@@ -1,44 +1,195 @@
 {% extends "base.html" %}
-{% block title %}ArtiForge — Lab Browser{% endblock %}
+{% block title %}ArtiForge — Scenario Browser{% endblock %}
 {% block content %}
 
-<div class="row mb-3">
+{# ── Header ──────────────────────────────────────────────────────────────── #}
+<div class="row mb-4 animate-in">
   <div class="col">
-    <h4 class="mb-0">Lab Browser</h4>
-    <small class="text-secondary">{{ labs|length }} lab(s) available</small>
+    <div class="d-flex align-items-center gap-3 mb-1">
+      <h4 class="mb-0" style="font-family: var(--font-mono); font-weight: 700; letter-spacing: 0.02em;">
+        Scenario Browser
+      </h4>
+      <span class="badge" style="background: rgba(34, 211, 238, 0.1); color: var(--accent-cyan);
+            border: 1px solid rgba(34, 211, 238, 0.2); font-family: var(--font-mono); font-size: 0.75rem;">
+        {{ labs|length }} scenarios
+      </span>
+    </div>
+    <p class="text-secondary small mb-0" style="max-width: 600px;">
+      Select a training scenario to generate artifacts, view the attack timeline, and run detection rules.
+    </p>
   </div>
 </div>
 
+{# ── Platform stats bar ──────────────────────────────────────────────────── #}
+{% set total_events = labs|selectattr('events', 'defined')|map(attribute='events')|sum %}
+{% set total_techniques = labs|selectattr('techniques', 'defined')|map(attribute='techniques')|map('length')|sum %}
+{% set total_hosts = labs|selectattr('hosts', 'defined')|map(attribute='hosts')|map('length')|sum %}
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-3 animate-in" style="animation-delay: 0.05s;">
+    <div class="card p-3">
+      <div class="stat-value" style="color: var(--accent-cyan);">{{ labs|selectattr('events', 'defined')|list|length }}</div>
+      <div class="stat-label">Scenarios</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3 animate-in" style="animation-delay: 0.1s;">
+    <div class="card p-3">
+      <div class="stat-value" style="color: var(--accent-amber);">{{ total_events }}</div>
+      <div class="stat-label">Total Events</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3 animate-in" style="animation-delay: 0.15s;">
+    <div class="card p-3">
+      <div class="stat-value" style="color: var(--accent-green);">{{ total_hosts }}</div>
+      <div class="stat-label">Total Hosts</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3 animate-in" style="animation-delay: 0.2s;">
+    <div class="card p-3">
+      <div class="stat-value" style="color: var(--accent-purple);">71</div>
+      <div class="stat-label">Event Generators</div>
+    </div>
+  </div>
+</div>
+
+{# ── Scenario cards ──────────────────────────────────────────────────────── #}
 <div class="row g-3">
 {% for lab in labs %}
   {% if lab.get("error") %}
-  <div class="col-12 col-md-6 col-xl-4">
-    <div class="card h-100 border-danger">
-      <div class="card-body">
-        <h6 class="card-title text-danger font-monospace">{{ lab.id }}</h6>
-        <p class="card-text text-secondary small">{{ lab.error }}</p>
+
+  {# Error card #}
+  <div class="col-12 animate-in" style="animation-delay: {{ loop.index * 0.05 + 0.2 }}s;">
+    <div class="card border-danger p-3">
+      <div class="d-flex align-items-center gap-2">
+        <span style="color: var(--accent-red); font-family: var(--font-mono); font-weight: 600;">ERROR</span>
+        <span class="font-monospace text-secondary">{{ lab.id }}</span>
+        <span class="text-secondary small ms-2">{{ lab.error }}</span>
       </div>
     </div>
   </div>
+
   {% else %}
-  <div class="col-12 col-md-6 col-xl-4">
-    <div class="card h-100">
-      <div class="card-body d-flex flex-column">
-        <div class="d-flex align-items-start justify-content-between mb-2">
-          <h6 class="card-title mb-0">{{ lab.name }}</h6>
-          <span class="badge bg-secondary font-monospace ms-2">{{ lab.id }}</span>
+
+  {# Scenario card #}
+  <div class="col-12 animate-in" style="animation-delay: {{ loop.index * 0.05 + 0.2 }}s;">
+    <div class="card" style="overflow: hidden;">
+
+      {# Top section — accent bar + title #}
+      <div style="border-left: 3px solid {{ ['var(--accent-cyan)', 'var(--accent-amber)', 'var(--accent-green)', 'var(--accent-purple)', 'var(--accent-blue)'][loop.index0 % 5] }};">
+        <div class="p-3 pb-0">
+          <div class="d-flex align-items-start justify-content-between">
+            <div class="flex-grow-1">
+              <div class="d-flex align-items-center gap-2 mb-2">
+                <span class="font-monospace" style="font-weight: 700; font-size: 1rem; color: var(--text-primary);">
+                  {{ lab.name }}
+                </span>
+                <span style="font-family: var(--font-mono); font-size: 0.7rem; color: var(--text-muted);
+                      background: var(--bg-raised); padding: 2px 8px; border-radius: 3px;
+                      border: 1px solid var(--border-subtle);">
+                  {{ lab.id }}
+                </span>
+              </div>
+              <p class="text-secondary small mb-2" style="max-width: 800px; line-height: 1.5;">
+                {{ lab.description[:200] }}{% if lab.description|length > 200 %}...{% endif %}
+              </p>
+            </div>
+            <a href="/lab/{{ lab.id }}" class="btn btn-sm btn-outline-primary ms-3"
+               style="white-space: nowrap; font-family: var(--font-mono); font-size: 0.78rem;">
+              Open Lab &rarr;
+            </a>
+          </div>
         </div>
-        {% if lab.description %}
-        <p class="card-text text-secondary small flex-grow-1">{{ lab.description }}</p>
-        {% endif %}
-        <div class="mt-3 d-flex gap-2 align-items-center">
-          <span class="badge bg-dark border text-secondary">{{ lab.phases }} phases</span>
-          <span class="badge bg-dark border text-secondary">{{ lab.events }} events</span>
-          <a href="/lab/{{ lab.id }}" class="btn btn-sm btn-outline-primary ms-auto">View →</a>
+
+        {# Bottom section — data grid #}
+        <div class="px-3 pb-3 pt-1">
+          <div class="row g-2">
+
+            {# Column 1: Key metrics #}
+            <div class="col-12 col-md-3">
+              <div class="d-flex gap-3">
+                <div>
+                  <div style="font-family: var(--font-mono); font-weight: 600; font-size: 1.1rem; color: var(--text-primary);">
+                    {{ lab.phases }}
+                  </div>
+                  <div class="stat-label" style="font-size: 0.65rem;">Phases</div>
+                </div>
+                <div>
+                  <div style="font-family: var(--font-mono); font-weight: 600; font-size: 1.1rem; color: var(--text-primary);">
+                    {{ lab.events }}
+                  </div>
+                  <div class="stat-label" style="font-size: 0.65rem;">Events</div>
+                </div>
+                <div>
+                  <div style="font-family: var(--font-mono); font-weight: 600; font-size: 1.1rem; color: var(--text-primary);">
+                    {{ lab.time_span }}m
+                  </div>
+                  <div class="stat-label" style="font-size: 0.65rem;">Span</div>
+                </div>
+              </div>
+            </div>
+
+            {# Column 2: Hosts #}
+            <div class="col-12 col-md-3">
+              <div class="stat-label mb-1" style="font-size: 0.65rem;">HOSTS</div>
+              <div class="d-flex flex-wrap gap-1">
+                {% for host in lab.hosts %}
+                <span style="font-family: var(--font-mono); font-size: 0.7rem; color: var(--accent-green);
+                      background: rgba(52, 211, 153, 0.06); padding: 1px 6px; border-radius: 3px;
+                      border: 1px solid rgba(52, 211, 153, 0.12);">
+                  {{ host }}
+                </span>
+                {% endfor %}
+              </div>
+            </div>
+
+            {# Column 3: MITRE Techniques #}
+            <div class="col-12 col-md-3">
+              <div class="stat-label mb-1" style="font-size: 0.65rem;">MITRE ATT&CK</div>
+              <div class="d-flex flex-wrap gap-1">
+                {% for tid in lab.techniques[:6] %}
+                <span class="badge-technique">{{ tid }}</span>
+                {% endfor %}
+                {% if lab.techniques|length > 6 %}
+                <span style="font-family: var(--font-mono); font-size: 0.65rem; color: var(--text-muted);">
+                  +{{ lab.techniques|length - 6 }}
+                </span>
+                {% endif %}
+              </div>
+            </div>
+
+            {# Column 4: Features / Channels #}
+            <div class="col-12 col-md-3">
+              <div class="stat-label mb-1" style="font-size: 0.65rem;">FEATURES</div>
+              <div class="d-flex flex-wrap gap-1">
+                {% for ch in lab.channels %}
+                <span class="badge-channel">{{ ch }}</span>
+                {% endfor %}
+                {% if lab.has_noise %}
+                <span class="badge-feature" style="background: rgba(245, 158, 11, 0.08);
+                      color: var(--accent-amber); border: 1px solid rgba(245, 158, 11, 0.15);">
+                  {% if lab.noise_profile %}{{ lab.noise_profile }}{% else %}noise{% endif %}
+                </span>
+                {% endif %}
+                {% if lab.has_forensics %}
+                <span class="badge-feature" style="background: rgba(167, 139, 250, 0.08);
+                      color: var(--accent-purple); border: 1px solid rgba(167, 139, 250, 0.15);">
+                  forensics
+                </span>
+                {% endif %}
+                {% if lab.sigma_count > 0 %}
+                <span class="badge-feature" style="background: rgba(248, 113, 113, 0.08);
+                      color: var(--accent-red); border: 1px solid rgba(248, 113, 113, 0.15);">
+                  {{ lab.sigma_count }} sigma
+                </span>
+                {% endif %}
+              </div>
+            </div>
+
+          </div>
         </div>
       </div>
     </div>
   </div>
+
   {% endif %}
 {% endfor %}
 </div>
