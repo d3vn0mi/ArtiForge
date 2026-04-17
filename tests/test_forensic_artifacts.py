@@ -98,3 +98,130 @@ def test_process_info_fields():
     assert info.original_filename == "mimikatz.exe"
     assert info.company == "gentilkiwi"
     assert "SHA256" in info.hashes
+
+
+import struct
+
+
+def test_prefetch_creates_pf_file(tmp_path):
+    from artiforge.generators.prefetch import generate_prefetch
+    from artiforge.generators.forensic_artifacts import ProcessInfo
+    info = ProcessInfo(
+        image_path=r"C:\Temp\mimikatz.exe", image_name="mimikatz.exe",
+        parent_dir=r"C:\Temp",
+        first_run=datetime(2026, 2, 19, 9, 15, 0, tzinfo=timezone.utc),
+        run_count=1, hashes={"SHA256": "AABB"}, file_version="2.2.0",
+        original_filename="mimikatz.exe", company="gentilkiwi", host="WIN-WS1")
+    path = generate_prefetch(info, tmp_path)
+    assert path.exists()
+    assert path.suffix == ".pf"
+    assert "MIMIKATZ.EXE" in path.name
+
+
+def test_prefetch_filename_format(tmp_path):
+    from artiforge.generators.prefetch import generate_prefetch, prefetch_hash
+    from artiforge.generators.forensic_artifacts import ProcessInfo
+    info = ProcessInfo(
+        image_path=r"C:\Temp\mimikatz.exe", image_name="mimikatz.exe",
+        parent_dir=r"C:\Temp",
+        first_run=datetime(2026, 2, 19, 9, 15, 0, tzinfo=timezone.utc),
+        run_count=1, hashes={}, file_version="", original_filename="",
+        company="", host="WIN-WS1")
+    path = generate_prefetch(info, tmp_path)
+    pf_hash = prefetch_hash(r"C:\Temp\mimikatz.exe")
+    assert path.name == f"MIMIKATZ.EXE-{pf_hash:08X}.pf"
+
+
+def test_prefetch_binary_header(tmp_path):
+    from artiforge.generators.prefetch import generate_prefetch
+    from artiforge.generators.forensic_artifacts import ProcessInfo
+    info = ProcessInfo(
+        image_path=r"C:\Temp\mimikatz.exe", image_name="mimikatz.exe",
+        parent_dir=r"C:\Temp",
+        first_run=datetime(2026, 2, 19, 9, 15, 0, tzinfo=timezone.utc),
+        run_count=3, hashes={}, file_version="", original_filename="",
+        company="", host="WIN-WS1")
+    path = generate_prefetch(info, tmp_path)
+    data = path.read_bytes()
+    version = struct.unpack_from("<I", data, 0)[0]
+    assert version == 30
+    assert data[4:8] == b"MAM\x04"
+    run_count = struct.unpack_from("<I", data, 176)[0]
+    assert run_count == 3
+
+
+def test_prefetch_exe_name_in_header(tmp_path):
+    from artiforge.generators.prefetch import generate_prefetch
+    from artiforge.generators.forensic_artifacts import ProcessInfo
+    info = ProcessInfo(
+        image_path=r"C:\Temp\mimikatz.exe", image_name="mimikatz.exe",
+        parent_dir=r"C:\Temp",
+        first_run=datetime(2026, 2, 19, 9, 15, 0, tzinfo=timezone.utc),
+        run_count=1, hashes={}, file_version="", original_filename="",
+        company="", host="WIN-WS1")
+    path = generate_prefetch(info, tmp_path)
+    data = path.read_bytes()
+    name_bytes = data[16:16 + 60 * 2]
+    name = name_bytes.decode("utf-16-le").rstrip("\x00")
+    assert name == "MIMIKATZ.EXE"
+
+
+def test_prefetch_hash_deterministic():
+    from artiforge.generators.prefetch import prefetch_hash
+    h1 = prefetch_hash(r"C:\Temp\mimikatz.exe")
+    h2 = prefetch_hash(r"C:\Temp\mimikatz.exe")
+    assert h1 == h2
+    h3 = prefetch_hash(r"C:\Windows\System32\cmd.exe")
+    assert h1 != h3
+
+
+def test_amcache_creates_json(tmp_path):
+    from artiforge.generators.amcache import generate_amcache
+    from artiforge.generators.forensic_artifacts import ProcessInfo
+    infos = [ProcessInfo(
+        image_path=r"C:\Temp\mimikatz.exe", image_name="mimikatz.exe",
+        parent_dir=r"C:\Temp",
+        first_run=datetime(2026, 2, 19, 9, 15, 0, tzinfo=timezone.utc),
+        run_count=1, hashes={"SHA256": "AABB", "MD5": "CCDD"},
+        file_version="2.2.0", original_filename="mimikatz.exe",
+        company="gentilkiwi", host="WIN-WS1")]
+    path = generate_amcache(infos, tmp_path)
+    assert path.exists()
+    assert path.name == "amcache_entries.json"
+
+
+def test_amcache_json_structure(tmp_path):
+    from artiforge.generators.amcache import generate_amcache
+    from artiforge.generators.forensic_artifacts import ProcessInfo
+    infos = [ProcessInfo(
+        image_path=r"C:\Temp\mimikatz.exe", image_name="mimikatz.exe",
+        parent_dir=r"C:\Temp",
+        first_run=datetime(2026, 2, 19, 9, 15, 0, tzinfo=timezone.utc),
+        run_count=1, hashes={"SHA256": "AABB"},
+        file_version="2.2.0", original_filename="mimikatz.exe",
+        company="gentilkiwi", host="WIN-WS1")]
+    path = generate_amcache(infos, tmp_path)
+    entries = json.loads(path.read_text())
+    assert isinstance(entries, list)
+    assert len(entries) == 1
+    entry = entries[0]
+    assert entry["full_path"] == r"C:\Temp\mimikatz.exe"
+    assert entry["sha1"] != ""
+    assert entry["first_run"] == "2026-02-19T09:15:00Z"
+    assert entry["file_version"] == "2.2.0"
+    assert entry["publisher"] == "gentilkiwi"
+    assert entry["original_filename"] == "mimikatz.exe"
+
+
+def test_amcache_uses_sha1_from_hashes(tmp_path):
+    from artiforge.generators.amcache import generate_amcache
+    from artiforge.generators.forensic_artifacts import ProcessInfo
+    infos = [ProcessInfo(
+        image_path=r"C:\Temp\test.exe", image_name="test.exe",
+        parent_dir=r"C:\Temp",
+        first_run=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        run_count=1, hashes={"SHA1": "DA39A3EE5E6B"},
+        file_version="", original_filename="", company="", host="WIN-WS1")]
+    path = generate_amcache(infos, tmp_path)
+    entries = json.loads(path.read_text())
+    assert entries[0]["sha1"] == "DA39A3EE5E6B"
