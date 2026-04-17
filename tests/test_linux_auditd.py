@@ -244,3 +244,36 @@ def test_auditd_exporter_one_file_per_host(tmp_path):
     names = {f.name for f in files}
     assert "LNX-WEB1_audit.log" in names
     assert "LNX-DB1_audit.log" in names
+
+
+def test_ecs_auditd_event_module():
+    from artiforge.exporters.elastic import _to_ecs
+    ev = _make_auditd_event(1300, {"exe": "/usr/bin/bash", "pid": "5678",
+                                    "uid": "0", "comm": '"bash"'})
+    doc = _to_ecs(ev)
+    assert doc["event"]["module"] == "auditd"
+
+
+def test_ecs_auditd_process_fields():
+    from artiforge.exporters.elastic import _to_ecs
+    ev = _make_auditd_event(1300, {"exe": "/usr/bin/bash", "pid": "5678",
+                                    "uid": "0", "comm": '"bash"'})
+    doc = _to_ecs(ev)
+    assert doc["process"]["executable"] == "/usr/bin/bash"
+    assert doc["process"]["pid"] == 5678
+
+
+def test_ecs_auditd_user_fields():
+    from artiforge.exporters.elastic import _to_ecs
+    ev = _make_auditd_event(1300, {"exe": "/usr/bin/bash", "uid": "1000",
+                                    "auid": "1000"})
+    doc = _to_ecs(ev)
+    assert doc["user"]["id"] == "1000"
+
+
+def test_cli_format_includes_auditd():
+    from click.testing import CliRunner
+    from artiforge.cli import main
+    runner = CliRunner()
+    result = runner.invoke(main, ["generate", "--help"])
+    assert "auditd" in result.output

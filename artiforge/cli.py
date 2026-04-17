@@ -316,7 +316,7 @@ def info(lab: str):
     "--format", "fmt",
     default="xml,elastic",
     show_default=True,
-    help="Output formats: comma-separated list of xml, elastic, evtx",
+    help="Output formats: comma-separated list of xml, elastic, evtx, auditd",
 )
 @click.option(
     "--phases",
@@ -471,6 +471,15 @@ def generate(lab: str | None, lab_path: str | None, output: str, fmt: str,
         evtx_files = evtx_exporter.export(bundle, evtx_dir)
         written.extend(evtx_files)
         click.echo(f"  [evtx]    → {evtx_dir}  ({len(evtx_files)} files)")
+
+    # ── Auditd export
+    if "auditd" in formats:
+        from artiforge.exporters import auditd_exporter
+        auditd_dir = run_dir / "auditd"
+        auditd_files = auditd_exporter.export(bundle, auditd_dir)
+        if auditd_files:
+            written.extend(auditd_files)
+            click.echo(f"  [auditd]  → {auditd_dir}  ({len(auditd_files)} files)")
 
     # ── Navigator layer (written whenever the lab has MITRE techniques)
     all_tids = [tid for p in spec.attack.phases for tid in p.mitre]
