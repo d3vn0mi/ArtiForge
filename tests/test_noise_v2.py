@@ -98,7 +98,7 @@ def test_sample_timestamp_office_hours_biased():
     assert morning > night * 2
 
 
-from artiforge.core.models import Host, User
+from artiforge.core.models import Host, NoiseSpec, User
 
 
 @pytest.fixture
@@ -178,3 +178,69 @@ def test_windows_update_timestamps_close_together(host, user, ts):
     timestamps = sorted(ev.timestamp for ev in events)
     spread = (timestamps[-1] - timestamps[0]).total_seconds()
     assert spread <= 5
+
+
+def test_generate_with_new_types(host):
+    from artiforge.generators.noise import generate
+    spec = NoiseSpec(
+        host="WIN-WS1",
+        file_operations=2, registry_operations=2,
+        service_changes=1, network_connections=2,
+        windows_updates=1,
+    )
+    base = datetime(2026, 2, 19, 9, 0, 0, tzinfo=timezone.utc)
+    events = generate(spec, host, base, 1000)
+    eids = [ev.eid for ev in events]
+    assert eids.count(11) >= 2  # file ops + WU file
+    assert eids.count(13) == 2  # registry
+    assert 7036 in eids         # service
+    assert eids.count(3) >= 2   # network + WU network
+    assert 22 in eids           # WU dns
+
+
+def test_generate_with_profile(host):
+    from artiforge.generators.noise import generate
+    spec = NoiseSpec(host="WIN-WS1", noise_profile="office_hours", spread_minutes=60)
+    base = datetime(2026, 2, 19, 9, 0, 0, tzinfo=timezone.utc)
+    random.seed(42)
+    events = generate(spec, host, base, 1000)
+    assert len(events) > 30
+    assert all(ev.phase_id == 0 for ev in events)
+
+
+def test_generate_backward_compat(host):
+    from artiforge.generators.noise import generate
+    spec = NoiseSpec(host="WIN-WS1", logon_pairs=2, process_spawns=3, dns_queries=4)
+    base = datetime(2026, 2, 19, 9, 0, 0, tzinfo=timezone.utc)
+    random.seed(42)
+    events = generate(spec, host, base, 1000)
+    eids = [ev.eid for ev in events]
+    assert eids.count(4624) == 2
+    assert eids.count(4634) == 2
+    assert eids.count(1) == 3
+    assert eids.count(22) == 4
+    assert len(events) == 2*2 + 3 + 4
+
+
+def test_generate_profile_with_override(host):
+    from artiforge.generators.noise import generate
+    spec = NoiseSpec(
+        host="WIN-WS1", noise_profile="office_hours",
+        process_spawns=1,
+        windows_updates=0,
+    )
+    base = datetime(2026, 2, 19, 9, 0, 0, tzinfo=timezone.utc)
+    random.seed(42)
+    events = generate(spec, host, base, 1000)
+    sysmon1 = [ev for ev in events if ev.eid == 1 and ev.channel == "Sysmon"]
+    assert len(sysmon1) == 1
+
+
+def test_generate_events_sorted_by_timestamp(host):
+    from artiforge.generators.noise import generate
+    spec = NoiseSpec(host="WIN-WS1", noise_profile="office_hours", spread_minutes=120)
+    base = datetime(2026, 2, 19, 9, 0, 0, tzinfo=timezone.utc)
+    random.seed(42)
+    events = generate(spec, host, base, 1000)
+    timestamps = [ev.timestamp for ev in events]
+    assert timestamps == sorted(timestamps)

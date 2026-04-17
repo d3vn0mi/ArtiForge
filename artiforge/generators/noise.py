@@ -501,13 +501,28 @@ def generate(
 ) -> list[GeneratedEvent]:
     """Generate all noise events for a single NoiseSpec entry.
 
-    Events are scattered randomly within [base_time, base_time + spread_minutes].
-    Returns them sorted by timestamp. The caller assigns final record IDs.
+    When noise_profile is set, preset defaults fill fields left at 0.
+    Events are distributed using the temporal profile's weight curve.
     """
-    events: list[GeneratedEvent] = []
-    spread_seconds = noise_spec.spread_minutes * 60
+    from artiforge.generators.noise_profiles import resolve_counts, sample_timestamp
 
-    # Choose a realistic user for noise (first user on host, or SYSTEM)
+    events: list[GeneratedEvent] = []
+
+    counts = resolve_counts(
+        noise_profile=noise_spec.noise_profile,
+        logon_pairs=noise_spec.logon_pairs,
+        process_spawns=noise_spec.process_spawns,
+        dns_queries=noise_spec.dns_queries,
+        file_operations=noise_spec.file_operations,
+        registry_operations=noise_spec.registry_operations,
+        service_changes=noise_spec.service_changes,
+        network_connections=noise_spec.network_connections,
+        windows_updates=noise_spec.windows_updates,
+    )
+
+    profile = noise_spec.noise_profile
+    spread = noise_spec.spread_minutes
+
     if host.users:
         noise_user = host.users[0]
     else:
@@ -515,24 +530,47 @@ def generate(
 
     rid = record_id_start
 
-    # Logon/logoff pairs
-    for _ in range(noise_spec.logon_pairs):
-        ts = base_time + timedelta(seconds=random.randint(0, spread_seconds))
+    for _ in range(counts["logon_pairs"]):
+        ts = sample_timestamp(base_time, spread, profile)
         pair = logon_pair(host, noise_user, ts, rid)
         events.extend(pair)
         rid += len(pair)
 
-    # Process spawns
-    for _ in range(noise_spec.process_spawns):
-        ts = base_time + timedelta(seconds=random.randint(0, spread_seconds))
+    for _ in range(counts["process_spawns"]):
+        ts = sample_timestamp(base_time, spread, profile)
         events.append(process_spawn(host, noise_user, ts, rid))
         rid += 1
 
-    # DNS queries
-    for _ in range(noise_spec.dns_queries):
-        ts = base_time + timedelta(seconds=random.randint(0, spread_seconds))
+    for _ in range(counts["dns_queries"]):
+        ts = sample_timestamp(base_time, spread, profile)
         events.append(dns_query(host, noise_user, ts, rid))
         rid += 1
+
+    for _ in range(counts["file_operations"]):
+        ts = sample_timestamp(base_time, spread, profile)
+        events.append(file_operation(host, noise_user, ts, rid))
+        rid += 1
+
+    for _ in range(counts["registry_operations"]):
+        ts = sample_timestamp(base_time, spread, profile)
+        events.append(registry_operation(host, noise_user, ts, rid))
+        rid += 1
+
+    for _ in range(counts["service_changes"]):
+        ts = sample_timestamp(base_time, spread, profile)
+        events.append(service_change(host, noise_user, ts, rid))
+        rid += 1
+
+    for _ in range(counts["network_connections"]):
+        ts = sample_timestamp(base_time, spread, profile)
+        events.append(network_connection(host, noise_user, ts, rid))
+        rid += 1
+
+    for _ in range(counts["windows_updates"]):
+        ts = sample_timestamp(base_time, spread, profile)
+        wu_events = windows_update(host, noise_user, ts, rid)
+        events.extend(wu_events)
+        rid += len(wu_events)
 
     events.sort(key=lambda e: e.timestamp)
     return events
