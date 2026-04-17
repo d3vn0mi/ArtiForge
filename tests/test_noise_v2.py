@@ -157,3 +157,24 @@ def test_network_connection_produces_sysmon3(host, user, ts):
     assert "DestinationIp" in ev.event_data
     assert "DestinationPort" in ev.event_data
     assert "SourceIp" in ev.event_data
+
+
+def test_windows_update_produces_three_events(host, user, ts):
+    from artiforge.generators.noise import windows_update
+    events = windows_update(host, user, ts, 1000)
+    assert len(events) == 3
+    eids = {ev.eid for ev in events}
+    channels = {ev.channel for ev in events}
+    assert 22 in eids   # DNS query
+    assert 3 in eids    # network connection
+    assert 11 in eids   # file create
+    assert "Sysmon" in channels
+    assert all(ev.phase_id == 0 for ev in events)
+
+
+def test_windows_update_timestamps_close_together(host, user, ts):
+    from artiforge.generators.noise import windows_update
+    events = windows_update(host, user, ts, 1000)
+    timestamps = sorted(ev.timestamp for ev in events)
+    spread = (timestamps[-1] - timestamps[0]).total_seconds()
+    assert spread <= 5

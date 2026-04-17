@@ -423,6 +423,74 @@ def network_connection(host, user, ts, record_id):
     return _make_event(record_id, ts, "Sysmon", 3, host, _SYSMON_PROVIDER, event_data)
 
 
+_WU_DOMAINS = [
+    ("update.microsoft.com", "23.203.6.140"),
+    ("ctldl.windowsupdate.com", "13.107.4.52"),
+    ("download.windowsupdate.com", "13.107.4.50"),
+    ("sls.update.microsoft.com", "20.190.128.17"),
+]
+
+
+def windows_update(host, user, ts, record_id_start):
+    """Correlated Windows Update burst: DNS → connect → file write (3 events)."""
+    domain, ip = random.choice(_WU_DOMAINS)
+    svchost = r"C:\Windows\System32\svchost.exe"
+    proc_guid = _guid()
+    proc_id = _pid()
+
+    dns_data = {
+        "RuleName": "-",
+        "UtcTime": format_system_time(ts),
+        "ProcessGuid": proc_guid,
+        "ProcessId": proc_id,
+        "QueryName": domain,
+        "QueryStatus": "0",
+        "QueryResults": f"type:  1 {ip};",
+        "Image": svchost,
+        "User": "NT AUTHORITY\\SYSTEM",
+    }
+
+    net_ts = ts + timedelta(seconds=random.randint(1, 2))
+    net_data = {
+        "RuleName": "-",
+        "UtcTime": format_system_time(net_ts),
+        "ProcessGuid": proc_guid,
+        "ProcessId": proc_id,
+        "Image": svchost,
+        "User": "NT AUTHORITY\\SYSTEM",
+        "Protocol": "tcp",
+        "Initiated": "true",
+        "SourceIsIpv6": "false",
+        "SourceIp": host.ip,
+        "SourceHostname": host.fqdn,
+        "SourcePort": str(random.randint(49152, 65535)),
+        "SourcePortName": "-",
+        "DestinationIsIpv6": "false",
+        "DestinationIp": ip,
+        "DestinationHostname": domain,
+        "DestinationPort": "443",
+        "DestinationPortName": "https",
+    }
+
+    file_ts = ts + timedelta(seconds=random.randint(3, 5))
+    file_data = {
+        "RuleName": "-",
+        "UtcTime": format_system_time(file_ts),
+        "ProcessGuid": proc_guid,
+        "ProcessId": proc_id,
+        "Image": svchost,
+        "TargetFilename": rf"C:\Windows\SoftwareDistribution\Download\{_rand_hex(16)}.tmp",
+        "CreationUtcTime": format_system_time(file_ts),
+        "User": "NT AUTHORITY\\SYSTEM",
+    }
+
+    return [
+        _make_event(record_id_start, ts, "Sysmon", 22, host, _SYSMON_PROVIDER, dns_data),
+        _make_event(record_id_start + 1, net_ts, "Sysmon", 3, host, _SYSMON_PROVIDER, net_data),
+        _make_event(record_id_start + 2, file_ts, "Sysmon", 11, host, _SYSMON_PROVIDER, file_data),
+    ]
+
+
 # ── Noise injection orchestrator ──────────────────────────────────────────────
 
 def generate(
