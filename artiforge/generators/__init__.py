@@ -7,7 +7,7 @@ from typing import Any
 
 from artiforge.core.correlation import CorrelationContext
 from artiforge.core.models import FileArtifactSpec, GeneratedFile, Host, LabSpec, Phase, User
-from artiforge.generators import application, files, powershell, security, sysmon, system, wmi
+from artiforge.generators import application, files, linux_auditd, powershell, security, sysmon, system, wmi
 
 _CHANNEL_MAP = {
     "Security":    security,
@@ -16,6 +16,7 @@ _CHANNEL_MAP = {
     "Application": application,
     "PowerShell":  powershell,
     "WMI":         wmi,
+    "Auditd":      linux_auditd,
 }
 
 

@@ -136,3 +136,24 @@ def test_unknown_eid_raises(linux_host, linux_user, ts, spec_stub):
     with pytest.raises(ValueError, match="not implemented"):
         generate(eid=9999, fields={}, host=linux_host, user=linux_user,
                  spec=spec_stub, timestamp=ts)
+
+
+def test_dispatch_auditd_channel(linux_host, linux_user, ts, spec_stub):
+    from artiforge.generators import dispatch_event
+    result = dispatch_event(
+        channel="Auditd", eid=1300,
+        fields={"exe": "/usr/bin/bash"},
+        host=linux_host, user=linux_user, spec=spec_stub, timestamp=ts,
+    )
+    assert result["exe"] == "/usr/bin/bash"
+    assert result["arch"] == "c000003e"
+
+
+def test_dispatch_unknown_channel_raises(linux_host, linux_user, ts, spec_stub):
+    from artiforge.generators import dispatch_event
+    with pytest.raises(ValueError, match="Unknown channel"):
+        dispatch_event(
+            channel="FakeChannel", eid=1,
+            fields={}, host=linux_host, user=linux_user,
+            spec=spec_stub, timestamp=ts,
+        )
