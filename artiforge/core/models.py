@@ -31,6 +31,7 @@ class Host(BaseModel):
     ip: str
     fqdn: str
     os: str = "Windows 10"
+    platform: str = "windows"
     sid_prefix: str = "S-1-5-21-1111111111-2222222222-3333333333"
     users: list[User] = Field(default_factory=list)
 
