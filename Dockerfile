@@ -8,10 +8,10 @@ WORKDIR /app
 
 # Install evtxforge first (separate package, cached layer)
 COPY libs/evtxforge/ ./libs/evtxforge/
-RUN pip install --no-cache-dir ./libs/evtxforge
+RUN pip install --no-cache-dir ./libs/evtxforge && rm -rf ./libs
 
 # Install ArtiForge (non-editable so labs land in site-packages)
-COPY setup.py README.md ./
+COPY pyproject.toml setup.py README.md ./
 COPY artiforge/ ./artiforge/
 RUN pip install --no-cache-dir ".[web]"
 
