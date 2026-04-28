@@ -87,6 +87,11 @@ See **[QUICKSTART.md](QUICKSTART.md)** — spin up Elastic/Kibana, generate arti
 | `serve` | Launch the web dashboard (requires `pip install artiforge[web]`) |
 | `new-lab --id <id>` | Scaffold a new lab from the built-in template |
 | `schema` | Print JSON Schema for IDE autocompletion |
+| `es-list` | List all ArtiForge indices in Elasticsearch |
+| `es-delete <lab_id>` | Delete a scenario's data from Elasticsearch (with confirmation) |
+| `es-purge` | Delete ALL ArtiForge indices (with confirmation) |
+
+> `es-list`, `es-delete`, and `es-purge` are shell commands handled by `artiforge.sh` — they run on the host, not inside Docker. Set `ES_URL` if Elasticsearch is not on localhost.
 
 ### Key Flags
 
