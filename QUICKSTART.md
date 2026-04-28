@@ -406,6 +406,98 @@ warning if you combine `--no-meta` with a noise-enabled lab.
 
 ---
 
+## Deleting a Scenario from Kibana
+
+When you want to remove a specific lab's data from Elasticsearch — to re-ingest
+with different settings, clean up after a training session, or free disk space —
+follow these steps. This deletes **only that scenario's index**, leaving other
+labs and the data view intact.
+
+### Step 1 — Find the index name
+
+Each lab ingestion creates an index named `winlogbeat-artiforge-<lab_id>-<timestamp>`.
+List all ArtiForge indices:
+
+```bash
+curl -s "http://localhost:9200/_cat/indices/winlogbeat-artiforge-*?v&s=index"
+```
+
+Example output:
+```
+health status index                                          docs.count store.size
+green  open   winlogbeat-artiforge-uc3-20260219_091200           40        52kb
+green  open   winlogbeat-artiforge-uc3e-20260219_091200         278       185kb
+```
+
+### Step 2 — Delete the specific index
+
+Delete a single scenario by its exact index name:
+
+```bash
+# Delete UC3E data only
+curl -X DELETE "http://localhost:9200/winlogbeat-artiforge-uc3e-20260219_091200"
+```
+
+Or delete all runs of a specific lab (any timestamp):
+
+```bash
+# Delete all UC3E indices
+curl -X DELETE "http://localhost:9200/winlogbeat-artiforge-uc3e-*"
+```
+
+Expected response: `{"acknowledged":true}`
+
+### Step 3 — Verify deletion
+
+```bash
+curl -s "http://localhost:9200/_cat/indices/winlogbeat-artiforge-*?v&s=index"
+```
+
+The deleted index should no longer appear. Other labs' indices are untouched.
+
+### Step 4 — Refresh Kibana
+
+Go to Kibana and refresh the Discover page. The deleted scenario's events will
+no longer appear under the **ArtiForge Labs** data view. No data view changes
+are needed — the `winlogbeat-artiforge-*` pattern automatically reflects
+whatever indices exist.
+
+### Delete all scenarios at once
+
+To wipe all ArtiForge data from Elasticsearch without touching the lab
+environment (Elasticsearch and Kibana keep running):
+
+```bash
+curl -X DELETE "http://localhost:9200/winlogbeat-artiforge-*"
+```
+
+This removes every ArtiForge index. The data view and index template remain
+in place, so you can re-ingest immediately without running `setup_index.sh`
+again.
+
+### Re-ingest after deletion
+
+```bash
+# Regenerate and ingest
+./artiforge.sh generate --lab uc3e --format elastic --seed 42 --output /work/artifacts
+bash scripts/ingest.sh artifacts/uc3e_*/elastic/bulk_import.ndjson
+```
+
+### Also clean up local artifact files
+
+The `artifacts/` directory on your host contains the generated files. Remove
+them if you no longer need them:
+
+```bash
+# Delete a specific run
+rm -rf artifacts/uc3e_20260219_091200/
+
+# Delete all artifact output
+rm -rf artifacts/
+```
+
+---
+
 ## Tear Down
 
 ```bash
