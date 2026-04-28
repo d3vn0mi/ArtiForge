@@ -521,19 +521,24 @@ def generate(lab: str | None, lab_path: str | None, output: str, fmt: str,
     click.echo(f"  Output:  {run_dir.resolve()}\n")
 
     # ── Write import instructions
-    _write_import_md(run_dir, bundle, formats)
+    _write_import_md(run_dir, bundle, formats,
+                     has_forensics=getattr(spec.attack, 'forensic_artifacts', False))
 
     click.echo(f"[ArtiForge] Done. See {run_dir / 'IMPORT.md'} for import instructions.\n")
 
 
-def _write_import_md(run_dir: Path, bundle, formats: list[str]):
+def _write_import_md(run_dir: Path, bundle, formats: list[str],
+                     has_forensics: bool = False):
+    attack_count = sum(1 for e in bundle.events if e.phase_id != 0)
+    noise_count = sum(1 for e in bundle.events if e.phase_id == 0)
+
     lines = [
         f"# ArtiForge Import Guide",
         f"",
         f"**Lab:** {bundle.lab_name}  ",
         f"**Generated:** {datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')}  ",
         f"**Base time:** {bundle.base_time.strftime('%Y-%m-%dT%H:%M:%SZ')}  ",
-        f"**Events:** {len(bundle.events)}  ",
+        f"**Events:** {len(bundle.events)} ({attack_count} attack, {noise_count} noise)  ",
         f"",
     ]
 
@@ -542,23 +547,106 @@ def _write_import_md(run_dir: Path, bundle, formats: list[str]):
             "## Elasticsearch / Kibana",
             "",
             "```bash",
-            "# 1. Upload via bulk API",
-            f'curl -s -X POST "http://localhost:9200/_bulk" \\',
-            f'  -H "Content-Type: application/x-ndjson" \\',
-            f'  --data-binary @elastic/bulk_import.ndjson',
+            "# Ingest via the helper script",
+            f"bash scripts/ingest.sh {run_dir.name}/elastic/bulk_import.ndjson",
+            "```",
             "",
-            "# 2. Or use Kibana Dev Tools → POST /_bulk with the NDJSON content",
+            "Then open Kibana → Discover → select **ArtiForge Labs** data view.",
+            f"Set time range to cover the scenario base time "
+            f"({bundle.base_time.strftime('%Y-%m-%d')}).",
+            "",
+            "### Manage ingested data",
+            "",
+            "```bash",
+            f"./artiforge.sh es-list                # list all ingested scenarios",
+            f"./artiforge.sh es-delete {bundle.lab_id}       "
+            f"# delete this lab's data from Elasticsearch",
+            f"./artiforge.sh es-purge               # delete ALL ArtiForge data",
             "```",
             "",
         ]
 
     if "xml" in formats:
         lines += [
-            "## Windows Event Viewer / wevtutil",
+            "## Windows Event Viewer",
             "",
             "The `events/` directory contains one XML file per (host, channel).",
-            "Open directly in Windows Event Viewer via File → Open Saved Log,",
-            "or import into a live log channel using `wevtutil im <file.xml>`.",
+            "Open directly in Windows Event Viewer via **File → Open Saved Log**,",
+            "or import using `wevtutil im <file.xml>`.",
+            "",
+        ]
+
+    if "evtx" in formats:
+        lines += [
+            "## Binary EVTX (Chainsaw / Hayabusa / Event Viewer)",
+            "",
+            "The `evtx/` directory contains one `.evtx` file per (host, channel).",
+            "",
+            "```bash",
+            "# Chainsaw",
+            f"chainsaw hunt {run_dir.name}/evtx/ -s sigma/ --mapping mappings/sigma.yml",
+            "",
+            "# Hayabusa",
+            f"hayabusa csv-timeline -d {run_dir.name}/evtx/",
+            "",
+            "# Windows Event Viewer",
+            "# Double-click any .evtx file, or: File → Open Saved Log",
+            "",
+            "# PowerShell",
+            f"Get-WinEvent -Path .\\{run_dir.name}\\evtx\\WIN-WS1_Security.evtx | "
+            "Select-Object TimeCreated, Id, Message | Format-Table",
+            "```",
+            "",
+        ]
+
+    if "auditd" in formats:
+        lines += [
+            "## Linux audit.log",
+            "",
+            "The `auditd/` directory contains one `audit.log` per Linux host.",
+            "",
+            "```bash",
+            "# Search for process executions",
+            f"ausearch -if {run_dir.name}/auditd/LNX-WEB1_audit.log -m EXECVE",
+            "",
+            "# Summary report",
+            f"aureport -if {run_dir.name}/auditd/LNX-WEB1_audit.log --summary",
+            "",
+            "# Or just grep",
+            f"grep 'type=SYSCALL' {run_dir.name}/auditd/LNX-WEB1_audit.log",
+            "```",
+            "",
+        ]
+
+    if has_forensics:
+        lines += [
+            "## Forensic Artifacts (Prefetch / Amcache / $MFT)",
+            "",
+            "The `forensics/` directory contains one subdirectory per host:",
+            "",
+            "```",
+            "forensics/",
+            "├── WIN-WS1/",
+            "│   ├── prefetch/           Binary .pf files (use PECmd to parse)",
+            "│   ├── amcache_entries.json (same fields as AmcacheParser output)",
+            "│   └── mft_entries.json    (same fields as MFTECmd output)",
+            "└── WIN-WS2/",
+            "    └── ...",
+            "```",
+            "",
+            "```bash",
+            "# Parse Prefetch with PECmd (Eric Zimmerman)",
+            f"PECmd.exe -d {run_dir.name}\\forensics\\WIN-WS1\\prefetch\\",
+            "",
+            "# View Amcache entries",
+            f"cat {run_dir.name}/forensics/WIN-WS1/amcache_entries.json | python3 -m json.tool",
+            "",
+            "# View $MFT entries",
+            f"cat {run_dir.name}/forensics/WIN-WS1/mft_entries.json | python3 -m json.tool",
+            "```",
+            "",
+            "Cross-correlate: every executable in Prefetch should have a matching",
+            "entry in Amcache (by path) and $MFT (by filename + parent directory).",
             "",
         ]
 
