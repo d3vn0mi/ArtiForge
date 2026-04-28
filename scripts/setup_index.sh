@@ -71,7 +71,7 @@ echo " ready."
 
 # ── Create Kibana data view ───────────────────────────────────────────────────
 echo "--> Creating Kibana data view 'winlogbeat-artiforge-*'..."
-curl -sf -X POST "$KIBANA/api/data_views/data_view" \
+RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$KIBANA/api/data_views/data_view" \
   -H "Content-Type: application/json" \
   -H "kbn-xsrf: true" \
   -d '{
@@ -80,16 +80,20 @@ curl -sf -X POST "$KIBANA/api/data_views/data_view" \
       "name":  "ArtiForge Labs",
       "timeFieldName": "@timestamp"
     }
-  }' | python3 -c "
-import sys, json
-r = json.load(sys.stdin)
-if 'data_view' in r:
-    print(f'   OK  id={r[\"data_view\"][\"id\"]}')
-elif 'error' in r and 'already exists' in str(r):
-    print('   OK  (data view already exists)')
-else:
-    print(f'   WARN: {r}')
-"
+  }')
+
+HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+BODY=$(echo "$RESPONSE" | sed '$d')
+
+if [ "$HTTP_CODE" = "200" ]; then
+  DV_ID=$(echo "$BODY" | python3 -c "import sys,json; print(json.load(sys.stdin).get('data_view',{}).get('id','?'))" 2>/dev/null || echo "?")
+  echo "   OK  id=$DV_ID"
+elif [ "$HTTP_CODE" = "409" ]; then
+  echo "   OK  (data view already exists)"
+else
+  echo "   WARN: HTTP $HTTP_CODE"
+  echo "   $BODY" | head -3
+fi
 
 echo ""
 echo "==> Setup complete."
