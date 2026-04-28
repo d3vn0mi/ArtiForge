@@ -422,6 +422,169 @@ bash scripts/run_lab.sh uc3
 
 ---
 
+## Realistic Hunt Exercise — UC3E with Max Noise, No Metadata
+
+This section walks through a **production-grade hunt exercise**: generate the
+UC3E scenario with the `--no-meta` flag (strips all ArtiForge training
+metadata from the NDJSON), so the events in Kibana look exactly like real
+Winlogbeat data. Trainees see hundreds of events with no `labels.phase_id`
+to lean on — they must hunt through genuine-looking noise to find the attack.
+
+### Generate with --no-meta
+
+```bash
+./artiforge.sh generate --lab uc3e --format elastic --no-meta --seed 42 \
+  --output /work/artifacts
+```
+
+> **What `--no-meta` does:** Removes the `labels.phase_id` and
+> `labels.phase_name` fields from every event. Trainees cannot filter by
+> phase or distinguish attack from noise using metadata — they must rely on
+> event content, timestamps, and forensic reasoning.
+
+Expected output:
+```
+[ArtiForge] Generating artifacts for lab: Egg-Cellent Resume (Enhanced)
+  [elastic] → artifacts/uc3e_20260219_091200/elastic/bulk_import.ndjson (no labels)
+
+  Summary: 278 events generated
+```
+
+The NDJSON contains **~278 events** — 44 attack events buried in ~234 noise
+events from the `office_hours` and `24x7_server` temporal profiles. All events
+look identical in structure — no training labels to give away which are real.
+
+### Ingest into Elasticsearch
+
+```bash
+# Make sure the lab environment is running
+docker compose up -d
+
+# Wait for healthy status
+docker compose ps
+
+# Set up the index template (only needed once)
+bash scripts/setup_index.sh
+
+# Ingest the no-meta events
+bash scripts/ingest.sh artifacts/uc3e_*/elastic/bulk_import.ndjson
+```
+
+Expected output:
+```
+==> ArtiForge — Ingest
+    File  : artifacts/uc3e_.../elastic/bulk_import.ndjson
+    Index : winlogbeat-artiforge-uc3e-20260219_091200
+    ...
+--> Verified: 278 documents in index
+```
+
+### Verify in Kibana
+
+Open Kibana at `http://localhost:5601` (or `http://<SERVER_IP>:5601`).
+
+1. Go to **Discover** (left sidebar → magnifying glass)
+2. Select the **ArtiForge Labs** data view (top-left dropdown)
+3. Set time range to **Feb 19 2026, 09:00 → 12:00**
+
+You should see **278 events**. Confirm there is no `labels.phase_id` column
+available — this verifies `--no-meta` is working.
+
+### Verify the noise is realistic
+
+Run these queries to confirm the mix of attack and noise events looks
+authentic:
+
+**Check total event count by host:**
+```kql
+host.name : *
+```
+Add `host.name` as a column. You should see events spread across WIN-WS1,
+WIN-WS2, WIN-DC1, and WIN-BACKUP1 — the noise profiles create activity on
+every host.
+
+**Check process execution events (attack + noise mixed together):**
+```kql
+winlog.event_id : 1 and winlog.channel : "Microsoft-Windows-Sysmon/Operational"
+```
+You should see a mix of benign processes (chrome.exe, svchost.exe,
+RuntimeBroker.exe) alongside the attack processes (ie4uinit.exe, msxsl.exe).
+The trainee's job is to spot the malicious ones.
+
+**Check DNS queries (attack + noise mixed):**
+```kql
+winlog.event_id : 22
+```
+Benign domains (google.com, microsoft.com) are mixed with the suspicious
+`argotunnel.com` queries. Trainees must identify which DNS lookups are C2.
+
+**Check network connections (attack + noise mixed):**
+```kql
+winlog.event_id : 3
+```
+Normal HTTPS connections to Microsoft/Google CDNs alongside the Cloudflared
+tunnel attempts to `198.41.192.227:443` and the Veeam connection to port 9401.
+
+**Check logon events (noise-heavy on DC):**
+```kql
+winlog.event_id : 4624
+```
+WIN-DC1 should have heavy logon traffic (the `24x7_server` profile generates
+many logon pairs). The real attack logons on WIN-WS1 and WIN-WS2 are buried
+in this noise.
+
+### Validate the attack is still findable
+
+Even without metadata labels, a skilled analyst should be able to find the
+attack chain. Run the ArtiForge detection check to confirm the attack events
+are present and detectable:
+
+```bash
+./artiforge.sh check --lab uc3e --seed 42
+```
+
+Expected output:
+```
+[ArtiForge] Checking lab: Egg-Cellent Resume (Enhanced)
+  44 attack events  ·  278 total
+
+  Built-in rules:
+  FIRED  DR-001  Suspicious LOLBin Execution    T1218      (3 events)
+  FIRED  DR-002  Scheduled Task Creation        T1053.005  (1 event)
+  FIRED  DR-003  Service Installation           T1543.003  (1 event)
+  ...
+  Coverage: 10/13 rules fired (76.9%)
+
+  Sigma rules:
+  FIRED  [sigma]  LOLBin Process Creation       T1218      (2 events)
+  FIRED  [sigma]  Cloudflared Tunnel Connection T1090      (5 events)
+  ...
+  Coverage: 4/5 rules fired (80.0%)
+```
+
+This confirms the attack events are embedded in the data and detectable with
+both built-in and Sigma rules — the trainee just needs to find them without
+the training labels.
+
+### Suggested hunt approach for trainees
+
+Give trainees these instructions (no answers):
+
+> You have received a Winlogbeat data export from a Windows domain with 4
+> hosts. Intelligence suggests an attacker may have compromised the network
+> via a phishing lure. Your task:
+>
+> 1. Identify the initial access vector and the compromised user
+> 2. Map the full attack chain across all hosts
+> 3. Identify any persistence mechanisms
+> 4. Find evidence of lateral movement
+> 5. Determine what data (if any) was staged for exfiltration
+>
+> Start by looking at process creation events on the workstation hosts
+> and work outward from there.
+
+---
+
 ## Reference — Event ID Cheat Sheet
 
 | EID | Channel | Phase | What to look for |
