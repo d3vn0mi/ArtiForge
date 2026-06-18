@@ -18,6 +18,18 @@
           },
           "title": "Phases",
           "type": "array"
+        },
+        "noise": {
+          "items": {
+            "$ref": "#/$defs/NoiseSpec"
+          },
+          "title": "Noise",
+          "type": "array"
+        },
+        "forensic_artifacts": {
+          "default": false,
+          "title": "Forensic Artifacts",
+          "type": "boolean"
         }
       },
       "required": [
@@ -95,6 +107,42 @@
           "minimum": 0,
           "title": "Repeat Gap Seconds",
           "type": "integer"
+        },
+        "jitter_seconds": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Jitter Seconds",
+          "type": "integer"
+        },
+        "repeat_jitter_seconds": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Repeat Jitter Seconds",
+          "type": "integer"
+        },
+        "session": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Session"
+        },
+        "process": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Process"
         }
       },
       "required": [
@@ -186,6 +234,11 @@
           "title": "Os",
           "type": "string"
         },
+        "platform": {
+          "default": "windows",
+          "title": "Platform",
+          "type": "string"
+        },
         "sid_prefix": {
           "default": "S-1-5-21-1111111111-2222222222-3333333333",
           "title": "Sid Prefix",
@@ -247,6 +300,11 @@
           "default": "v18",
           "title": "Mitre Version",
           "type": "string"
+        },
+        "lab_schema_version": {
+          "default": "1",
+          "title": "Lab Schema Version",
+          "type": "string"
         }
       },
       "required": [
@@ -254,6 +312,86 @@
         "name"
       ],
       "title": "LabMeta",
+      "type": "object"
+    },
+    "NoiseSpec": {
+      "description": "Configures background noise events injected into the timeline.",
+      "properties": {
+        "host": {
+          "title": "Host",
+          "type": "string"
+        },
+        "spread_minutes": {
+          "default": 60,
+          "minimum": 1,
+          "title": "Spread Minutes",
+          "type": "integer"
+        },
+        "logon_pairs": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Logon Pairs",
+          "type": "integer"
+        },
+        "process_spawns": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Process Spawns",
+          "type": "integer"
+        },
+        "dns_queries": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Dns Queries",
+          "type": "integer"
+        },
+        "file_operations": {
+          "default": 0,
+          "minimum": 0,
+          "title": "File Operations",
+          "type": "integer"
+        },
+        "registry_operations": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Registry Operations",
+          "type": "integer"
+        },
+        "service_changes": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Service Changes",
+          "type": "integer"
+        },
+        "network_connections": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Network Connections",
+          "type": "integer"
+        },
+        "windows_updates": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Windows Updates",
+          "type": "integer"
+        },
+        "noise_profile": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Noise Profile"
+        }
+      },
+      "required": [
+        "host"
+      ],
+      "title": "NoiseSpec",
       "type": "object"
     },
     "Phase": {
@@ -315,6 +453,17 @@
           },
           "title": "File Artifacts",
           "type": "array"
+        },
+        "validation": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ValidationSpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "required": [
@@ -345,6 +494,20 @@
         "domain"
       ],
       "title": "User",
+      "type": "object"
+    },
+    "ValidationSpec": {
+      "description": "Per-phase validation configuration.",
+      "properties": {
+        "suppress": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Suppress",
+          "type": "array"
+        }
+      },
+      "title": "ValidationSpec",
       "type": "object"
     }
   },

@@ -3,45 +3,64 @@
 {% block content %}
 
 {# ── Breadcrumb + header ──────────────────────────────────────────────────── #}
-<nav aria-label="breadcrumb" class="mb-3">
-  <ol class="breadcrumb">
-    <li class="breadcrumb-item"><a href="/" class="text-secondary">Labs</a></li>
-    <li class="breadcrumb-item active font-monospace">{{ spec.lab.id }}</li>
+<nav aria-label="breadcrumb" class="mb-3 animate-in">
+  <ol class="breadcrumb mb-0" style="font-family: var(--font-mono); font-size: 0.8rem;">
+    <li class="breadcrumb-item"><a href="/" style="color: var(--text-secondary); text-decoration: none;">scenarios</a></li>
+    <li class="breadcrumb-item active" style="color: var(--accent-cyan);">{{ spec.lab.id }}</li>
   </ol>
 </nav>
 
-<div class="row mb-3 align-items-end">
+<div class="row mb-3 align-items-end animate-in" style="animation-delay: 0.05s;">
   <div class="col">
-    <h4 class="mb-1">{{ spec.lab.name }}</h4>
-    <span class="text-secondary small">{{ spec.lab.description }}</span>
+    <h4 class="mb-1" style="font-family: var(--font-mono); font-weight: 700;">{{ spec.lab.name }}</h4>
+    <span class="text-secondary small">{{ spec.lab.description[:150] }}{% if spec.lab.description|length > 150 %}...{% endif %}</span>
   </div>
   <div class="col-auto">
     <form class="d-flex gap-2 align-items-center" method="get">
-      <label class="text-secondary small mb-0">Seed</label>
+      <label class="text-secondary small mb-0" style="font-family: var(--font-mono); font-size: 0.72rem;">SEED</label>
       <input type="number" name="seed" value="{{ seed if seed is not none else '' }}"
-             placeholder="random" class="form-control form-control-sm"
-             style="width:100px; background:#161b22; color:#e6edf3; border-color:#30363d;">
-      <label class="text-secondary small mb-0">Jitter</label>
+             placeholder="rng" class="form-control form-control-sm form-control-dark" style="width:90px;">
+      <label class="text-secondary small mb-0" style="font-family: var(--font-mono); font-size: 0.72rem;">JITTER</label>
       <input type="number" name="jitter" value="{{ jitter }}" min="0"
-             class="form-control form-control-sm"
-             style="width:70px; background:#161b22; color:#e6edf3; border-color:#30363d;">
+             class="form-control form-control-sm form-control-dark" style="width:65px;">
       <input type="hidden" name="tab" value="{{ tab }}">
-      <button class="btn btn-sm btn-outline-secondary" type="submit">Regenerate</button>
+      <button class="btn btn-sm btn-outline-primary" type="submit"
+              style="font-family: var(--font-mono); font-size: 0.78rem;">Regenerate</button>
     </form>
   </div>
 </div>
 
 {# ── Stat pills ───────────────────────────────────────────────────────────── #}
-<div class="d-flex gap-2 mb-4 flex-wrap">
-  <span class="badge bg-dark border">{{ attack_count }} attack events</span>
-  <span class="badge bg-dark border">{{ noise_count }} noise events</span>
-  <span class="badge bg-dark border">{{ spec.attack.phases|length }} phases</span>
-  <span class="badge bg-dark border">{{ all_tids|length }} techniques</span>
-  <span class="badge bg-dark border">{{ spec.infrastructure.domain }}</span>
+<div class="d-flex gap-2 mb-4 flex-wrap animate-in" style="animation-delay: 0.1s;">
+  <span style="font-family: var(--font-mono); font-size: 0.75rem; padding: 3px 10px;
+        background: rgba(34, 211, 238, 0.06); color: var(--accent-cyan);
+        border: 1px solid rgba(34, 211, 238, 0.15); border-radius: 4px;">
+    {{ attack_count }} attack
+  </span>
+  <span style="font-family: var(--font-mono); font-size: 0.75rem; padding: 3px 10px;
+        background: rgba(245, 158, 11, 0.06); color: var(--accent-amber);
+        border: 1px solid rgba(245, 158, 11, 0.15); border-radius: 4px;">
+    {{ noise_count }} noise
+  </span>
+  <span style="font-family: var(--font-mono); font-size: 0.75rem; padding: 3px 10px;
+        background: var(--bg-raised); color: var(--text-secondary);
+        border: 1px solid var(--border-subtle); border-radius: 4px;">
+    {{ spec.attack.phases|length }} phases
+  </span>
+  <span style="font-family: var(--font-mono); font-size: 0.75rem; padding: 3px 10px;
+        background: var(--bg-raised); color: var(--text-secondary);
+        border: 1px solid var(--border-subtle); border-radius: 4px;">
+    {{ all_tids|length }} techniques
+  </span>
+  <span style="font-family: var(--font-mono); font-size: 0.75rem; padding: 3px 10px;
+        background: var(--bg-raised); color: var(--text-secondary);
+        border: 1px solid var(--border-subtle); border-radius: 4px;">
+    {{ spec.infrastructure.domain }}
+  </span>
 </div>
 
 {# ── Tabs ─────────────────────────────────────────────────────────────────── #}
-<ul class="nav nav-tabs mb-4" id="labTabs">
+<ul class="nav nav-tabs mb-4 animate-in" style="animation-delay: 0.15s;" id="labTabs">
   <li class="nav-item">
     <a class="nav-link {% if tab == 'timeline' %}active{% endif %}"
        href="?tab=timeline{% if seed is not none %}&seed={{ seed }}{% endif %}&jitter={{ jitter }}">
@@ -68,46 +87,51 @@
 {% if tab == "timeline" %}
 
 <div class="mb-3 d-flex gap-2 flex-wrap">
-  <button class="btn btn-sm btn-outline-secondary" onclick="toggleNoise()">Toggle noise</button>
+  <button class="btn btn-sm btn-outline-secondary" onclick="toggleNoise()"
+          style="font-family: var(--font-mono); font-size: 0.75rem;">Toggle noise</button>
   {% for ph in phase_summary %}
-  <span class="badge" style="background:{{ ph.colour }}20; color:{{ ph.colour }}; border:1px solid {{ ph.colour }}40; cursor:pointer;"
+  <span style="background:{{ ph.colour }}10; color:{{ ph.colour }}; border:1px solid {{ ph.colour }}30;
+        cursor:pointer; font-family: var(--font-mono); font-size: 0.72rem; padding: 3px 8px;
+        border-radius: 4px;"
         onclick="filterPhase({{ ph.id }})">
     Ph{{ ph.id }}: {{ ph.name[:20] }}
   </span>
   {% endfor %}
-  <span class="badge bg-secondary" style="cursor:pointer;" onclick="filterPhase(0)">noise</span>
-  <span class="badge bg-dark border" style="cursor:pointer;" onclick="clearFilter()">clear filter</span>
+  <span style="background: var(--bg-raised); color: var(--text-muted); border: 1px solid var(--border-subtle);
+        cursor:pointer; font-family: var(--font-mono); font-size: 0.72rem; padding: 3px 8px;
+        border-radius: 4px;"
+        onclick="filterPhase(0)">noise</span>
+  <span style="background: var(--bg-raised); color: var(--text-secondary); border: 1px solid var(--border-subtle);
+        cursor:pointer; font-family: var(--font-mono); font-size: 0.72rem; padding: 3px 8px;
+        border-radius: 4px;"
+        onclick="clearFilter()">clear</span>
 </div>
 
 <div class="table-responsive">
-<table class="table table-sm table-hover align-middle" id="timelineTable" style="font-size:.82rem;">
-  <thead class="text-secondary" style="border-bottom:1px solid #30363d;">
-    <tr>
-      <th>Time</th>
-      <th>Phase</th>
-      <th>Host</th>
-      <th>Ch</th>
-      <th>EID</th>
-      <th>Description</th>
-      <th>Techniques</th>
+<table class="table table-sm table-hover align-middle" id="timelineTable" style="font-size:.8rem;">
+  <thead style="border-bottom:1px solid var(--border-accent);">
+    <tr style="color: var(--text-muted); font-family: var(--font-mono); font-size: 0.7rem;
+              text-transform: uppercase; letter-spacing: 0.06em;">
+      <th>Time</th><th>Phase</th><th>Host</th><th>Ch</th><th>EID</th><th>Description</th><th>Techniques</th>
     </tr>
   </thead>
   <tbody>
   {% for ev in timeline %}
-  <tr class="{% if ev.phase_id == 0 %}event-row-noise{% endif %}"
-      data-phase="{{ ev.phase_id }}">
-    <td class="font-monospace text-secondary">{{ ev.ts }}</td>
+  <tr class="{% if ev.phase_id == 0 %}event-row-noise{% endif %}" data-phase="{{ ev.phase_id }}">
+    <td class="font-monospace" style="color: var(--text-muted); font-size: 0.78rem;">{{ ev.ts }}</td>
     <td>
       <span class="phase-dot" style="background:{{ ev.colour }};"></span>
-      <span class="text-secondary small">{% if ev.phase_id == 0 %}noise{% else %}Ph{{ ev.phase_id }}{% endif %}</span>
+      <span style="color: var(--text-secondary); font-size: 0.75rem;">
+        {% if ev.phase_id == 0 %}noise{% else %}Ph{{ ev.phase_id }}{% endif %}
+      </span>
     </td>
-    <td class="font-monospace text-secondary small">{{ ev.host }}</td>
-    <td class="text-secondary small">{{ ev.channel[:6] }}</td>
-    <td class="font-monospace">{{ ev.eid }}</td>
+    <td style="font-family: var(--font-mono); color: var(--text-secondary); font-size: 0.78rem;">{{ ev.host }}</td>
+    <td><span class="badge-channel">{{ ev.channel[:6] }}</span></td>
+    <td class="font-monospace" style="font-weight: 500;">{{ ev.eid }}</td>
     <td>{{ ev.summary }}</td>
     <td>
       {% for tid in ev.techniques %}
-      <span class="badge badge-technique" style="background:#1a2a4a; color:#79c0ff; border:1px solid #1f4e8c;">{{ tid }}</span>
+      <span class="badge-technique">{{ tid }}</span>
       {% endfor %}
     </td>
   </tr>
@@ -120,7 +144,6 @@
 <script>
   let noiseVisible = true;
   let activePhase  = null;
-
   function applyFilter() {
     document.querySelectorAll("#timelineTable tbody tr").forEach(row => {
       const ph = parseInt(row.dataset.phase);
@@ -130,9 +153,9 @@
       row.style.display = show ? "" : "none";
     });
   }
-  function toggleNoise()      { noiseVisible = !noiseVisible; applyFilter(); }
-  function filterPhase(ph)    { activePhase = ph; applyFilter(); }
-  function clearFilter()      { activePhase = null; noiseVisible = true; applyFilter(); }
+  function toggleNoise()   { noiseVisible = !noiseVisible; applyFilter(); }
+  function filterPhase(ph) { activePhase = ph; applyFilter(); }
+  function clearFilter()   { activePhase = null; noiseVisible = true; applyFilter(); }
 </script>
 
 {# ════════════════════════════════════════════════════════════════════════════
@@ -143,48 +166,50 @@
 <div class="row g-3 mb-4">
   <div class="col-12 col-md-4">
     <div class="card text-center p-3">
-      <div style="font-size:2rem; font-weight:700; color:#56d364;">{{ fired_count }}</div>
-      <div class="text-secondary small">rules fired</div>
+      <div class="stat-value" style="color: var(--accent-green);">{{ fired_count }}</div>
+      <div class="stat-label">Rules Fired</div>
     </div>
   </div>
   <div class="col-12 col-md-4">
     <div class="card text-center p-3">
-      <div style="font-size:2rem; font-weight:700;">{{ rule_results|length }}</div>
-      <div class="text-secondary small">total rules</div>
+      <div class="stat-value">{{ rule_results|length }}</div>
+      <div class="stat-label">Total Rules</div>
     </div>
   </div>
   <div class="col-12 col-md-4">
     <div class="card text-center p-3">
-      <div style="font-size:2rem; font-weight:700; color:#79c0ff;">
+      <div class="stat-value" style="color: var(--accent-cyan);">
         {{ "%.0f"|format(fired_count / rule_results|length * 100) }}%
       </div>
-      <div class="text-secondary small">coverage</div>
+      <div class="stat-label">Coverage</div>
     </div>
   </div>
 </div>
 
 <div class="card mb-4">
-  <div class="card-header text-secondary small">Detection Rule Results</div>
-  <table class="table table-sm align-middle mb-0" style="font-size:.82rem;">
-    <thead class="text-secondary" style="border-bottom:1px solid #30363d;">
-      <tr>
-        <th>Status</th><th>Rule ID</th><th>Name</th><th>Technique</th><th>Matches</th>
+  <div class="card-header" style="color: var(--text-muted); font-family: var(--font-mono);
+       font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em;
+       background: var(--bg-raised); border-bottom: 1px solid var(--border-subtle);">
+    Detection Rule Results
+  </div>
+  <table class="table table-sm align-middle mb-0" style="font-size:.8rem;">
+    <thead style="border-bottom:1px solid var(--border-subtle);">
+      <tr style="color: var(--text-muted); font-family: var(--font-mono); font-size: 0.7rem;
+                text-transform: uppercase; letter-spacing: 0.06em;">
+        <th>Status</th><th>Rule</th><th>Name</th><th>Technique</th><th>Hits</th>
       </tr>
     </thead>
     <tbody>
     {% for r in rule_results %}
     <tr>
       <td>
-        {% if r.fired %}
-        <span class="rule-fired fw-bold">FIRED</span>
-        {% else %}
-        <span class="rule-miss">NOT</span>
-        {% endif %}
+        {% if r.fired %}<span class="rule-fired">FIRED</span>
+        {% else %}<span class="rule-miss">NOT</span>{% endif %}
       </td>
-      <td class="font-monospace text-secondary">{{ r.rule.id }}</td>
+      <td style="font-family: var(--font-mono); color: var(--text-secondary); font-size: 0.78rem;">{{ r.rule.id }}</td>
       <td>{{ r.rule.name }}</td>
-      <td><span class="badge badge-technique" style="background:#1a2a4a; color:#79c0ff; border:1px solid #1f4e8c;">{{ r.rule.technique }}</span></td>
-      <td class="text-secondary">{{ r.matches|length }}</td>
+      <td><span class="badge-technique">{{ r.rule.technique }}</span></td>
+      <td style="font-family: var(--font-mono); color: var(--text-secondary);">{{ r.matches|length }}</td>
     </tr>
     {% endfor %}
     </tbody>
@@ -192,20 +217,27 @@
 </div>
 
 <div class="card">
-  <div class="card-header text-secondary small">Phase Summary</div>
-  <table class="table table-sm align-middle mb-0" style="font-size:.82rem;">
-    <thead class="text-secondary" style="border-bottom:1px solid #30363d;">
-      <tr><th>Phase</th><th>Name</th><th>Events</th><th>Techniques</th></tr>
+  <div class="card-header" style="color: var(--text-muted); font-family: var(--font-mono);
+       font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em;
+       background: var(--bg-raised); border-bottom: 1px solid var(--border-subtle);">
+    Phase Summary
+  </div>
+  <table class="table table-sm align-middle mb-0" style="font-size:.8rem;">
+    <thead style="border-bottom:1px solid var(--border-subtle);">
+      <tr style="color: var(--text-muted); font-family: var(--font-mono); font-size: 0.7rem;
+                text-transform: uppercase; letter-spacing: 0.06em;">
+        <th>Phase</th><th>Name</th><th>Events</th><th>Techniques</th>
+      </tr>
     </thead>
     <tbody>
     {% for ph in phase_summary %}
     <tr>
       <td><span class="phase-dot" style="background:{{ ph.colour }};"></span>{{ ph.id }}</td>
       <td>{{ ph.name }}</td>
-      <td class="font-monospace">{{ ph.count }}</td>
+      <td style="font-family: var(--font-mono); color: var(--text-secondary);">{{ ph.count }}</td>
       <td>
         {% for tid in ph.mitre %}
-        <span class="badge badge-technique" style="background:#1a2a4a; color:#79c0ff; border:1px solid #1f4e8c;">{{ tid }}</span>
+        <span class="badge-technique">{{ tid }}</span>
         {% endfor %}
       </td>
     </tr>
@@ -222,16 +254,34 @@
 <div class="row g-3">
   <div class="col-12 col-lg-5">
     <div class="card mb-3">
-      <div class="card-header text-secondary small">Infrastructure</div>
+      <div class="card-header" style="color: var(--text-muted); font-family: var(--font-mono);
+           font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em;
+           background: var(--bg-raised); border-bottom: 1px solid var(--border-subtle);">
+        Infrastructure
+      </div>
       <div class="card-body p-0">
-        <table class="table table-sm mb-0" style="font-size:.82rem;">
-          <thead class="text-secondary"><tr><th>Host</th><th>IP</th><th>OS</th></tr></thead>
+        <table class="table table-sm mb-0" style="font-size:.8rem;">
+          <thead style="border-bottom:1px solid var(--border-subtle);">
+            <tr style="color: var(--text-muted); font-family: var(--font-mono); font-size: 0.7rem;
+                      text-transform: uppercase; letter-spacing: 0.06em;">
+              <th>Host</th><th>IP</th><th>Platform</th><th>OS</th>
+            </tr>
+          </thead>
           <tbody>
           {% for name, host in spec.infrastructure.hosts.items() %}
           <tr>
-            <td class="font-monospace">{{ name }}</td>
-            <td class="font-monospace text-secondary">{{ host.ip }}</td>
-            <td class="text-secondary small">{{ host.os }}</td>
+            <td style="font-family: var(--font-mono); font-weight: 500;">{{ name }}</td>
+            <td style="font-family: var(--font-mono); color: var(--text-secondary);">{{ host.ip }}</td>
+            <td>
+              {% if host.platform == 'linux' %}
+              <span class="badge-feature" style="background: rgba(245, 158, 11, 0.08);
+                    color: var(--accent-amber); border: 1px solid rgba(245, 158, 11, 0.15);">linux</span>
+              {% else %}
+              <span class="badge-feature" style="background: rgba(96, 165, 250, 0.08);
+                    color: var(--accent-blue); border: 1px solid rgba(96, 165, 250, 0.15);">windows</span>
+              {% endif %}
+            </td>
+            <td style="color: var(--text-secondary); font-size: 0.78rem;">{{ host.os }}</td>
           </tr>
           {% endfor %}
           </tbody>
@@ -240,12 +290,18 @@
     </div>
 
     <div class="card">
-      <div class="card-header text-secondary small">MITRE ATT&CK Techniques</div>
+      <div class="card-header" style="color: var(--text-muted); font-family: var(--font-mono);
+           font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em;
+           background: var(--bg-raised); border-bottom: 1px solid var(--border-subtle);">
+        MITRE ATT&CK Techniques
+      </div>
       <div class="card-body">
         {% for tid in all_tids %}
-        <div class="d-flex justify-content-between align-items-center mb-1">
-          <span class="badge badge-technique" style="background:#1a2a4a; color:#79c0ff; border:1px solid #1f4e8c; min-width:90px; text-align:center;">{{ tid }}</span>
-          <span class="text-secondary small ms-2">{{ TECHNIQUE_NAMES.get(tid, tid) }}</span>
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <span class="badge-technique" style="min-width: 90px; text-align: center;">{{ tid }}</span>
+          <span style="color: var(--text-secondary); font-size: 0.78rem; margin-left: 12px;">
+            {{ TECHNIQUE_NAMES.get(tid, tid) }}
+          </span>
         </div>
         {% endfor %}
       </div>
@@ -254,25 +310,34 @@
 
   <div class="col-12 col-lg-7">
     <div class="card">
-      <div class="card-header text-secondary small">Attack Phases</div>
+      <div class="card-header" style="color: var(--text-muted); font-family: var(--font-mono);
+           font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em;
+           background: var(--bg-raised); border-bottom: 1px solid var(--border-subtle);">
+        Attack Phases
+      </div>
       <div class="card-body p-0">
-        <table class="table table-sm mb-0" style="font-size:.82rem;">
-          <thead class="text-secondary"><tr><th>#</th><th>Offset</th><th>Name</th><th>Events</th><th>Techniques</th></tr></thead>
+        <table class="table table-sm mb-0" style="font-size:.8rem;">
+          <thead style="border-bottom:1px solid var(--border-subtle);">
+            <tr style="color: var(--text-muted); font-family: var(--font-mono); font-size: 0.7rem;
+                      text-transform: uppercase; letter-spacing: 0.06em;">
+              <th>#</th><th>Offset</th><th>Name</th><th>Events</th><th>Techniques</th>
+            </tr>
+          </thead>
           <tbody>
           {% for ph in phase_summary %}
           <tr>
             <td><span class="phase-dot" style="background:{{ ph.colour }};"></span>{{ ph.id }}</td>
-            <td class="font-monospace text-secondary">
+            <td style="font-family: var(--font-mono); color: var(--text-muted);">
               T+{{ spec.attack.phases[loop.index0].offset_minutes }}m
             </td>
             <td>{{ ph.name }}</td>
-            <td class="font-monospace text-secondary">{{ ph.count }}</td>
+            <td style="font-family: var(--font-mono); color: var(--text-secondary);">{{ ph.count }}</td>
             <td>
-              {% for tid in ph.mitre[:3] %}
-              <span class="badge badge-technique" style="background:#1a2a4a; color:#79c0ff; border:1px solid #1f4e8c;">{{ tid }}</span>
+              {% for tid in ph.mitre[:4] %}
+              <span class="badge-technique">{{ tid }}</span>
               {% endfor %}
-              {% if ph.mitre|length > 3 %}
-              <span class="text-secondary small">+{{ ph.mitre|length - 3 }}</span>
+              {% if ph.mitre|length > 4 %}
+              <span style="color: var(--text-muted); font-size: 0.7rem;">+{{ ph.mitre|length - 4 }}</span>
               {% endif %}
             </td>
           </tr>

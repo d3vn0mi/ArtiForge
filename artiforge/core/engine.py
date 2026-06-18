@@ -21,6 +21,7 @@ from artiforge.core.models import (
     Phase,
     User,
 )
+from artiforge.core.correlation import CorrelationContext
 from artiforge.core.timeline import parse_base_time, resolve
 from artiforge.generators import dispatch_event, dispatch_file
 from artiforge.generators import noise as _noise_gen
@@ -155,6 +156,7 @@ def run(
 
     for phase in phases:
         phase_base = resolve(base_time, phase.offset_minutes)
+        phase_contexts: dict[str, CorrelationContext] = {}
 
         for event_spec in phase.events:
             # Resolve host
@@ -164,6 +166,10 @@ def run(
                     f"Phase {phase.id} event EID {event_spec.eid} has no host defined."
                 )
             host = _resolve_host(spec, host_name)
+
+            if host_name not in phase_contexts:
+                phase_contexts[host_name] = CorrelationContext(host)
+            ctx = phase_contexts[host_name]
 
             # Resolve user
             user_name = event_spec.user or phase.user
@@ -175,6 +181,9 @@ def run(
 
             # Effective per-event jitter (event-level overrides global)
             ev_jitter = event_spec.jitter_seconds or jitter_seconds
+
+            session_label = event_spec.session or "default"
+            process_label = event_spec.process or "default"
 
             # Track cumulative offset separately so repeat_jitter applies
             # to each inter-event gap, not to the total from zero.
@@ -204,6 +213,9 @@ def run(
                     user=user,
                     spec=spec,
                     timestamp=ts,
+                    ctx=ctx,
+                    session_label=session_label,
+                    process_label=process_label,
                 )
 
                 bundle.events.append(

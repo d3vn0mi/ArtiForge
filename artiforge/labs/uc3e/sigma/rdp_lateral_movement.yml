@@ -1,0 +1,16 @@
+title: RDP Lateral Movement via mstsc.exe
+id: a1b2c3d4-0005-0005-0005-000000000005
+status: stable
+description: Detects outbound RDP connections via mstsc.exe to internal hosts
+logsource:
+    product: windows
+    category: network_connection
+detection:
+    selection:
+        Image|endswith: '\mstsc.exe'
+        DestinationPort: '3389'
+    condition: selection
+level: high
+tags:
+    - attack.lateral_movement
+    - attack.t1021.001

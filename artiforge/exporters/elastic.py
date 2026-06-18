@@ -25,6 +25,7 @@ _ECS_LOG_NAME = {
     "Application": "Application",
     "PowerShell":  "Microsoft-Windows-PowerShell/Operational",
     "WMI":         "Microsoft-Windows-WMI-Activity/Operational",
+    "Auditd":      "auditd",
 }
 
 _ECS_PROVIDER = {
@@ -34,6 +35,7 @@ _ECS_PROVIDER = {
     "Application": "Application",
     "PowerShell":  "Microsoft-Windows-PowerShell",
     "WMI":         "Microsoft-Windows-WMI-Activity",
+    "Auditd":      "auditd",
 }
 
 _ECS_CATEGORY: dict[int, list[str]] = {
@@ -79,6 +81,14 @@ _ECS_CATEGORY: dict[int, list[str]] = {
     4103: ["process"], 4104: ["process"],
     # WMI
     5857: ["configuration"], 5860: ["configuration"], 5861: ["configuration"],
+    # Auditd
+    1300: ["process"],
+    1309: ["process"],
+    1302: ["file"],
+    1306: ["network"],
+    1100: ["authentication"],
+    1101: ["authentication"],
+    1103: ["authentication"],
 }
 
 
@@ -98,7 +108,8 @@ def _to_ecs(ev: GeneratedEvent, include_meta: bool = True) -> dict:
             "kind": "event",
             "category": _ECS_CATEGORY.get(ev.eid, ["event"]),
             "outcome": "success",
-            "module": "security" if ev.channel == "Security" else ev.channel.lower(),
+            "module": "auditd" if ev.channel == "Auditd" else (
+                "security" if ev.channel == "Security" else ev.channel.lower()),
         },
         "log": {
             "level": "information",
@@ -169,6 +180,31 @@ def _to_ecs(ev: GeneratedEvent, include_meta: bool = True) -> dict:
                 "name": [TECHNIQUE_NAMES.get(t, t) for t in tids],
             },
         }
+
+    # ── Auditd-specific ECS mappings
+    if ev.channel == "Auditd":
+        if "exe" in ed:
+            exe = ed["exe"].strip('"')
+            doc["process"] = {
+                "executable": exe,
+                "name": exe.rsplit("/", 1)[-1] if "/" in exe else exe,
+            }
+            if "pid" in ed:
+                doc["process"]["pid"] = int(ed["pid"])
+        if "uid" in ed:
+            doc["user"] = {"id": ed["uid"]}
+            if "auid" in ed:
+                doc["user"]["audit"] = {"id": ed["auid"]}
+        if "addr" in ed and "port" in ed:
+            doc["destination"] = {
+                "ip": ed["addr"],
+                "port": int(ed["port"]),
+            }
+            if "laddr" in ed:
+                doc["source"] = {
+                    "ip": ed.get("laddr", ""),
+                    "port": int(ed.get("lport", 0)),
+                }
 
     return doc
 

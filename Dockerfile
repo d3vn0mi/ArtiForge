@@ -6,15 +6,14 @@ LABEL git-commit=$GIT_COMMIT
 
 WORKDIR /app
 
-# Install Python dependencies first (layer cached unless requirements change)
-COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
+# Install evtxforge first (separate package, cached layer)
+COPY libs/evtxforge/ ./libs/evtxforge/
+RUN pip install --no-cache-dir ./libs/evtxforge && rm -rf ./libs
 
-# Copy the package and install it (non-editable so labs land in site-packages)
-COPY setup.py README.md ./
-COPY cli.py ./
+# Install ArtiForge (non-editable so labs land in site-packages)
+COPY pyproject.toml setup.py README.md ./
 COPY artiforge/ ./artiforge/
-RUN pip install --no-cache-dir .
+RUN pip install --no-cache-dir ".[web]"
 
 # /work is the user-facing mount point:
 #   docker run --rm -v "$(pwd):/work" artiforge generate --lab uc3

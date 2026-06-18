@@ -5,8 +5,9 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
+from artiforge.core.correlation import CorrelationContext
 from artiforge.core.models import FileArtifactSpec, GeneratedFile, Host, LabSpec, Phase, User
-from artiforge.generators import application, files, powershell, security, sysmon, system, wmi
+from artiforge.generators import application, files, linux_auditd, powershell, security, sysmon, system, wmi
 
 _CHANNEL_MAP = {
     "Security":    security,
@@ -15,6 +16,7 @@ _CHANNEL_MAP = {
     "Application": application,
     "PowerShell":  powershell,
     "WMI":         wmi,
+    "Auditd":      linux_auditd,
 }
 
 
@@ -26,6 +28,9 @@ def dispatch_event(
     user: User | None,
     spec: LabSpec,
     timestamp: datetime,
+    ctx: CorrelationContext | None = None,
+    session_label: str = "default",
+    process_label: str = "default",
 ) -> dict:
     mod = _CHANNEL_MAP.get(channel)
     if mod is None:
@@ -39,6 +44,9 @@ def dispatch_event(
         user=user,
         spec=spec,
         timestamp=timestamp,
+        ctx=ctx,
+        session_label=session_label,
+        process_label=process_label,
     )
 
 

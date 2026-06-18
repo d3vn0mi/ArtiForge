@@ -1,0 +1,15 @@
+title: Cloudflared Tunnel Connection
+id: a1b2c3d4-0003-0003-0003-000000000003
+status: stable
+description: Detects outbound connections to Cloudflare tunnel infrastructure
+logsource:
+    product: windows
+    category: network_connection
+detection:
+    selection:
+        DestinationHostname|contains: 'argotunnel.com'
+    condition: selection
+level: high
+tags:
+    - attack.command_and_control
+    - attack.t1090

@@ -168,6 +168,40 @@ def validate(lab: str | None, lab_path: str | None, strict: bool):
                             f"first 4624 at "
                             f"{logon_ts.strftime('%H:%M:%S')}"  # type: ignore[union-attr]
                         )
+
+            # 4. ProcessGuid correlation: Sysmon 5 should match a prior Sysmon 1
+            sysmon1_guids: dict[str, set[str]] = {}
+            for ev in bundle.events:
+                if ev.eid == 1 and ev.channel == "Sysmon" and ev.phase_id != 0:
+                    sysmon1_guids.setdefault(ev.host, set()).add(
+                        ev.event_data.get("ProcessGuid", ""))
+            for ev in bundle.events:
+                if ev.eid == 5 and ev.channel == "Sysmon" and ev.phase_id != 0:
+                    guid = ev.event_data.get("ProcessGuid", "")
+                    host_guids = sysmon1_guids.get(ev.host, set())
+                    if guid and guid not in host_guids:
+                        warnings.append(
+                            f"Phase {ev.phase_id} Sysmon 5 on {ev.host}: "
+                            f"ProcessGuid {guid[:20]}... not produced by any "
+                            f"Sysmon 1 on this host"
+                        )
+
+            # 5. Orphan logoff: 4634 TargetLogonId should match a prior 4624
+            logon_ids: dict[str, set[str]] = {}
+            for ev in bundle.events:
+                if ev.eid == 4624 and ev.phase_id != 0:
+                    logon_ids.setdefault(ev.host, set()).add(
+                        ev.event_data.get("TargetLogonId", ""))
+            for ev in bundle.events:
+                if ev.eid == 4634 and ev.phase_id != 0:
+                    lid = ev.event_data.get("TargetLogonId", "")
+                    host_lids = logon_ids.get(ev.host, set())
+                    if lid and lid not in host_lids:
+                        warnings.append(
+                            f"Phase {ev.phase_id} EID 4634 on {ev.host}: "
+                            f"TargetLogonId {lid} not produced by any 4624 "
+                            f"on this host"
+                        )
         except Exception:
             pass  # strict check is advisory; don't abort on generator errors
 
@@ -282,7 +316,7 @@ def info(lab: str):
     "--format", "fmt",
     default="xml,elastic",
     show_default=True,
-    help="Output formats: comma-separated list of xml, elastic",
+    help="Output formats: comma-separated list of xml, elastic, evtx, auditd",
 )
 @click.option(
     "--phases",
@@ -430,6 +464,23 @@ def generate(lab: str | None, lab_path: str | None, output: str, fmt: str,
         meta_tag = " (no labels)" if no_meta else ""
         click.echo(f"  [elastic] → {ndjson}{meta_tag}")
 
+    # ── EVTX export
+    if "evtx" in formats:
+        from artiforge.exporters import evtx_exporter
+        evtx_dir = run_dir / "evtx"
+        evtx_files = evtx_exporter.export(bundle, evtx_dir)
+        written.extend(evtx_files)
+        click.echo(f"  [evtx]    → {evtx_dir}  ({len(evtx_files)} files)")
+
+    # ── Auditd export
+    if "auditd" in formats:
+        from artiforge.exporters import auditd_exporter
+        auditd_dir = run_dir / "auditd"
+        auditd_files = auditd_exporter.export(bundle, auditd_dir)
+        if auditd_files:
+            written.extend(auditd_files)
+            click.echo(f"  [auditd]  → {auditd_dir}  ({len(auditd_files)} files)")
+
     # ── Navigator layer (written whenever the lab has MITRE techniques)
     all_tids = [tid for p in spec.attack.phases for tid in p.mitre]
     if all_tids:
@@ -455,25 +506,39 @@ def generate(lab: str | None, lab_path: str | None, output: str, fmt: str,
         file_count = len(bundle.files)
         click.echo(f"  [files]   → {run_dir / 'files'}  ({file_count} artifacts)")
 
+    # ── Forensic artifacts (Prefetch, Amcache, $MFT)
+    if spec.attack.forensic_artifacts:
+        from artiforge.generators import forensic_artifacts
+        forensics_dir = run_dir / "forensics"
+        forensic_files = forensic_artifacts.generate(bundle, forensics_dir)
+        if forensic_files:
+            written.extend(forensic_files)
+            click.echo(f"  [forensics] → {forensics_dir}  ({len(forensic_files)} artifacts)")
+
     # ── Summary
     total_events = len(bundle.events)
     click.echo(f"\n  Summary: {total_events} events generated")
     click.echo(f"  Output:  {run_dir.resolve()}\n")
 
     # ── Write import instructions
-    _write_import_md(run_dir, bundle, formats)
+    _write_import_md(run_dir, bundle, formats,
+                     has_forensics=getattr(spec.attack, 'forensic_artifacts', False))
 
     click.echo(f"[ArtiForge] Done. See {run_dir / 'IMPORT.md'} for import instructions.\n")
 
 
-def _write_import_md(run_dir: Path, bundle, formats: list[str]):
+def _write_import_md(run_dir: Path, bundle, formats: list[str],
+                     has_forensics: bool = False):
+    attack_count = sum(1 for e in bundle.events if e.phase_id != 0)
+    noise_count = sum(1 for e in bundle.events if e.phase_id == 0)
+
     lines = [
         f"# ArtiForge Import Guide",
         f"",
         f"**Lab:** {bundle.lab_name}  ",
         f"**Generated:** {datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')}  ",
         f"**Base time:** {bundle.base_time.strftime('%Y-%m-%dT%H:%M:%SZ')}  ",
-        f"**Events:** {len(bundle.events)}  ",
+        f"**Events:** {len(bundle.events)} ({attack_count} attack, {noise_count} noise)  ",
         f"",
     ]
 
@@ -482,23 +547,106 @@ def _write_import_md(run_dir: Path, bundle, formats: list[str]):
             "## Elasticsearch / Kibana",
             "",
             "```bash",
-            "# 1. Upload via bulk API",
-            f'curl -s -X POST "http://localhost:9200/_bulk" \\',
-            f'  -H "Content-Type: application/x-ndjson" \\',
-            f'  --data-binary @elastic/bulk_import.ndjson',
+            "# Ingest via the helper script",
+            f"bash scripts/ingest.sh {run_dir.name}/elastic/bulk_import.ndjson",
+            "```",
             "",
-            "# 2. Or use Kibana Dev Tools → POST /_bulk with the NDJSON content",
+            "Then open Kibana → Discover → select **ArtiForge Labs** data view.",
+            f"Set time range to cover the scenario base time "
+            f"({bundle.base_time.strftime('%Y-%m-%d')}).",
+            "",
+            "### Manage ingested data",
+            "",
+            "```bash",
+            f"./artiforge.sh es-list                # list all ingested scenarios",
+            f"./artiforge.sh es-delete {bundle.lab_id}       "
+            f"# delete this lab's data from Elasticsearch",
+            f"./artiforge.sh es-purge               # delete ALL ArtiForge data",
             "```",
             "",
         ]
 
     if "xml" in formats:
         lines += [
-            "## Windows Event Viewer / wevtutil",
+            "## Windows Event Viewer",
             "",
             "The `events/` directory contains one XML file per (host, channel).",
-            "Open directly in Windows Event Viewer via File → Open Saved Log,",
-            "or import into a live log channel using `wevtutil im <file.xml>`.",
+            "Open directly in Windows Event Viewer via **File → Open Saved Log**,",
+            "or import using `wevtutil im <file.xml>`.",
+            "",
+        ]
+
+    if "evtx" in formats:
+        lines += [
+            "## Binary EVTX (Chainsaw / Hayabusa / Event Viewer)",
+            "",
+            "The `evtx/` directory contains one `.evtx` file per (host, channel).",
+            "",
+            "```bash",
+            "# Chainsaw",
+            f"chainsaw hunt {run_dir.name}/evtx/ -s sigma/ --mapping mappings/sigma.yml",
+            "",
+            "# Hayabusa",
+            f"hayabusa csv-timeline -d {run_dir.name}/evtx/",
+            "",
+            "# Windows Event Viewer",
+            "# Double-click any .evtx file, or: File → Open Saved Log",
+            "",
+            "# PowerShell",
+            f"Get-WinEvent -Path .\\{run_dir.name}\\evtx\\WIN-WS1_Security.evtx | "
+            "Select-Object TimeCreated, Id, Message | Format-Table",
+            "```",
+            "",
+        ]
+
+    if "auditd" in formats:
+        lines += [
+            "## Linux audit.log",
+            "",
+            "The `auditd/` directory contains one `audit.log` per Linux host.",
+            "",
+            "```bash",
+            "# Search for process executions",
+            f"ausearch -if {run_dir.name}/auditd/LNX-WEB1_audit.log -m EXECVE",
+            "",
+            "# Summary report",
+            f"aureport -if {run_dir.name}/auditd/LNX-WEB1_audit.log --summary",
+            "",
+            "# Or just grep",
+            f"grep 'type=SYSCALL' {run_dir.name}/auditd/LNX-WEB1_audit.log",
+            "```",
+            "",
+        ]
+
+    if has_forensics:
+        lines += [
+            "## Forensic Artifacts (Prefetch / Amcache / $MFT)",
+            "",
+            "The `forensics/` directory contains one subdirectory per host:",
+            "",
+            "```",
+            "forensics/",
+            "├── WIN-WS1/",
+            "│   ├── prefetch/           Binary .pf files (use PECmd to parse)",
+            "│   ├── amcache_entries.json (same fields as AmcacheParser output)",
+            "│   └── mft_entries.json    (same fields as MFTECmd output)",
+            "└── WIN-WS2/",
+            "    └── ...",
+            "```",
+            "",
+            "```bash",
+            "# Parse Prefetch with PECmd (Eric Zimmerman)",
+            f"PECmd.exe -d {run_dir.name}\\forensics\\WIN-WS1\\prefetch\\",
+            "",
+            "# View Amcache entries",
+            f"cat {run_dir.name}/forensics/WIN-WS1/amcache_entries.json | python3 -m json.tool",
+            "",
+            "# View $MFT entries",
+            f"cat {run_dir.name}/forensics/WIN-WS1/mft_entries.json | python3 -m json.tool",
+            "```",
+            "",
+            "Cross-correlate: every executable in Prefetch should have a matching",
+            "entry in Amcache (by path) and $MFT (by filename + parent directory).",
             "",
         ]
 
@@ -624,7 +772,12 @@ def coverage():
               help="RNG seed for deterministic generation")
 @click.option("--jitter", default=0, type=int,
               help="Global ±N second timestamp jitter")
-def check(lab: str | None, lab_path: str | None, seed: int | None, jitter: int):
+@click.option("--sigma-dir", default=None, type=click.Path(),
+              help="Load additional Sigma rules from this directory")
+@click.option("--sigma-only", is_flag=True, default=False,
+              help="Only evaluate Sigma rules (skip built-in rules)")
+def check(lab: str | None, lab_path: str | None, seed: int | None, jitter: int,
+          sigma_dir, sigma_only):
     """Run built-in detection rules against a generated bundle and report coverage."""
     if not lab and not lab_path:
         click.echo("Error: provide --lab <id> or --lab-path <path>", err=True)
@@ -643,38 +796,82 @@ def check(lab: str | None, lab_path: str | None, seed: int | None, jitter: int):
         sys.exit(1)
 
     from artiforge.detectors import RULES, run_rules
-    results = run_rules(bundle)
+    from artiforge.detectors.sigma_loader import load_sigma_dir as _load_sigma_dir
+    from artiforge.detectors.sigma_evaluator import evaluate_rule
+
     attack_count = sum(1 for e in bundle.events if e.phase_id != 0)
-    fired_count = sum(1 for r in results if r["fired"])
 
     click.echo(f"\n[ArtiForge] Checking lab: {spec.lab.name}")
-    click.echo(f"  {len(RULES)} rules  ·  {attack_count} attack events  ·  {len(bundle.events)} total\n")
+    click.echo(f"  {attack_count} attack events  ·  {len(bundle.events)} total\n")
 
-    id_w    = max(len(r["rule"].id)        for r in results)
-    name_w  = max(len(r["rule"].name)      for r in results)
-    tech_w  = max(len(r["rule"].technique) for r in results)
+    # ── Built-in rules
+    if not sigma_only:
+        results = run_rules(bundle)
+        fired_count = sum(1 for r in results if r["fired"])
 
-    for r in results:
-        rule    = r["rule"]
-        fired   = r["fired"]
-        count   = len(r["matches"])
-        status  = "FIRED" if fired else "NOT  "
-        noun    = "event" if count == 1 else "events"
-        click.echo(
-            f"  {status}  {rule.id:<{id_w}}  "
-            f"{rule.name:<{name_w}}  "
-            f"{rule.technique:<{tech_w}}  "
-            f"({count} {noun})"
-        )
+        id_w    = max(len(r["rule"].id)        for r in results)
+        name_w  = max(len(r["rule"].name)      for r in results)
+        tech_w  = max(len(r["rule"].technique) for r in results)
 
-    pct = fired_count / len(RULES) * 100
-    click.echo(f"\n  Coverage: {fired_count}/{len(RULES)} rules fired ({pct:.1f}%)")
-    if fired_count == 0:
-        click.echo("  ⚠  No rules fired — the attack chain may not be detectable.")
-    elif fired_count == len(RULES):
-        click.echo("  Lab covers all built-in detection techniques.")
-    else:
-        click.echo("  Lab is detectable. Add events to cover unfired rules.")
+        click.echo("  Built-in rules:")
+        for r in results:
+            rule    = r["rule"]
+            fired   = r["fired"]
+            count   = len(r["matches"])
+            status  = "FIRED" if fired else "NOT  "
+            noun    = "event" if count == 1 else "events"
+            click.echo(
+                f"  {status}  {rule.id:<{id_w}}  "
+                f"{rule.name:<{name_w}}  "
+                f"{rule.technique:<{tech_w}}  "
+                f"({count} {noun})"
+            )
+        pct = fired_count / len(RULES) * 100
+        click.echo(f"  Coverage: {fired_count}/{len(RULES)} rules fired ({pct:.1f}%)\n")
+
+    # ── Sigma rules
+    sigma_rules = []
+
+    # Auto-discover from lab directory
+    lab_sigma_dir = Path(__file__).parent / "labs" / spec.lab.id / "sigma"
+    if lab_sigma_dir.is_dir():
+        sigma_rules.extend(_load_sigma_dir(lab_sigma_dir))
+
+    # External --sigma-dir
+    if sigma_dir:
+        sigma_rules.extend(_load_sigma_dir(Path(sigma_dir)))
+
+    if sigma_rules:
+        sigma_results = []
+        for sr in sigma_rules:
+            matches = evaluate_rule(sr, bundle.events)
+            mitre = ", ".join(sr.mitre_ids) if sr.mitre_ids else "-"
+            sigma_results.append({
+                "rule": sr, "fired": bool(matches),
+                "matches": matches, "mitre": mitre,
+            })
+
+        name_w = max(len(r["rule"].title) for r in sigma_results)
+        tech_w = max(len(r["mitre"]) for r in sigma_results)
+        fired_s = sum(1 for r in sigma_results if r["fired"])
+
+        click.echo("  Sigma rules:")
+        for r in sigma_results:
+            fired  = r["fired"]
+            count  = len(r["matches"])
+            status = "FIRED" if fired else "NOT  "
+            noun   = "event" if count == 1 else "events"
+            click.echo(
+                f"  {status}  [sigma]  "
+                f"{r['rule'].title:<{name_w}}  "
+                f"{r['mitre']:<{tech_w}}  "
+                f"({count} {noun})"
+            )
+        pct_s = fired_s / len(sigma_rules) * 100
+        click.echo(f"  Coverage: {fired_s}/{len(sigma_rules)} rules fired ({pct_s:.1f}%)")
+    elif sigma_only:
+        click.echo("  No Sigma rules found.")
+
     click.echo()
 
 

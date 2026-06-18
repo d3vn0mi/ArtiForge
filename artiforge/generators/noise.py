@@ -294,6 +294,203 @@ def dns_query(
     return _make_event(record_id, ts, "Sysmon", 22, host, _SYSMON_PROVIDER, event_data)
 
 
+# ── File targets for noise ───────────────────────────────────────────────
+
+_FILE_TARGETS = [
+    (r"C:\Users\{user}\AppData\Local\Temp\tmp{rand}.tmp",
+     r"C:\Windows\System32\svchost.exe"),
+    (r"C:\Users\{user}\Downloads\document_{rand}.pdf",
+     r"C:\Program Files\Google\Chrome\Application\chrome.exe"),
+    (r"C:\Windows\Prefetch\CHROME.EXE-{rand}.pf",
+     r"C:\Windows\System32\svchost.exe"),
+    (r"C:\Users\{user}\AppData\Local\Microsoft\Office\16.0\OfficeFileCache\{rand}.dat",
+     r"C:\Program Files\Microsoft Office\root\Office16\WINWORD.EXE"),
+    (r"C:\Users\{user}\AppData\Local\Temp\{rand}.log",
+     r"C:\Windows\System32\taskhostw.exe"),
+]
+
+_REGISTRY_TARGETS = [
+    (r"HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\UserAssist\{rand}\Count",
+     r"C:\Windows\explorer.exe"),
+    (r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\PackageIndex\{rand}",
+     r"C:\Windows\System32\svchost.exe"),
+    (r"HKCU\Software\Microsoft\Office\16.0\Common\General\RecentFiles",
+     r"C:\Program Files\Microsoft Office\root\Office16\WINWORD.EXE"),
+    (r"HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Notifications\Data\{rand}",
+     r"C:\Windows\System32\svchost.exe"),
+    (r"HKCU\Software\Microsoft\Windows\CurrentVersion\Search\JumplistData",
+     r"C:\Windows\System32\SearchIndexer.exe"),
+]
+
+_SERVICES = [
+    "Spooler", "Themes", "WSearch", "wuauserv", "BITS", "Winmgmt",
+    "Schedule", "W32Time", "EventLog", "CryptSvc",
+]
+
+_NETWORK_DESTINATIONS = [
+    ("13.107.4.52", "microsoft.com"),
+    ("20.190.128.17", "login.microsoftonline.com"),
+    ("142.250.80.100", "www.google.com"),
+    ("23.203.6.136", "www.microsoft.com"),
+    ("104.16.132.229", "cdnjs.cloudflare.com"),
+    ("20.231.239.246", "graph.microsoft.com"),
+    ("52.114.128.40", "teams.microsoft.com"),
+    ("204.79.197.200", "www.bing.com"),
+]
+
+_NETWORK_PROCESSES = [
+    r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+    r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+    r"C:\Windows\System32\svchost.exe",
+    r"C:\Windows\System32\MsMpEng.exe",
+]
+
+_SYSTEM_PROVIDER = ("Service Control Manager", "{555908d1-a6d7-4695-8e1e-26931d2012f4}")
+
+
+def _rand_hex(n: int = 8) -> str:
+    return ''.join(f'{random.getrandbits(8):02X}' for _ in range(n))
+
+
+def file_operation(host, user, ts, record_id):
+    """Sysmon EID 11 — benign file create."""
+    target_template, image = random.choice(_FILE_TARGETS)
+    target = target_template.format(user=user.username, rand=_rand_hex(4))
+    event_data = {
+        "RuleName": "-",
+        "UtcTime": format_system_time(ts),
+        "ProcessGuid": _guid(),
+        "ProcessId": _pid(),
+        "Image": image,
+        "TargetFilename": target,
+        "CreationUtcTime": format_system_time(ts),
+        "User": user.full,
+    }
+    return _make_event(record_id, ts, "Sysmon", 11, host, _SYSMON_PROVIDER, event_data)
+
+
+def registry_operation(host, user, ts, record_id):
+    """Sysmon EID 13 — benign registry value set."""
+    target_template, image = random.choice(_REGISTRY_TARGETS)
+    target = target_template.format(rand=_rand_hex(4))
+    event_data = {
+        "RuleName": "-",
+        "EventType": "SetValue",
+        "UtcTime": format_system_time(ts),
+        "ProcessGuid": _guid(),
+        "ProcessId": _pid(),
+        "Image": image,
+        "TargetObject": target,
+        "Details": "Binary Data",
+        "User": user.full,
+    }
+    return _make_event(record_id, ts, "Sysmon", 13, host, _SYSMON_PROVIDER, event_data)
+
+
+def service_change(host, user, ts, record_id):
+    """System EID 7036 — benign service state change."""
+    service = random.choice(_SERVICES)
+    state = random.choices(["running", "stopped"], weights=[80, 20], k=1)[0]
+    event_data = {"param1": service, "param2": state}
+    return _make_event(record_id, ts, "System", 7036, host, _SYSTEM_PROVIDER, event_data)
+
+
+def network_connection(host, user, ts, record_id):
+    """Sysmon EID 3 — benign outbound HTTPS connection."""
+    dest_ip, dest_host = random.choice(_NETWORK_DESTINATIONS)
+    image = random.choice(_NETWORK_PROCESSES)
+    port = random.choices(["443", "80"], weights=[90, 10], k=1)[0]
+    event_data = {
+        "RuleName": "-",
+        "UtcTime": format_system_time(ts),
+        "ProcessGuid": _guid(),
+        "ProcessId": _pid(),
+        "Image": image,
+        "User": user.full,
+        "Protocol": "tcp",
+        "Initiated": "true",
+        "SourceIsIpv6": "false",
+        "SourceIp": host.ip,
+        "SourceHostname": host.fqdn,
+        "SourcePort": str(random.randint(49152, 65535)),
+        "SourcePortName": "-",
+        "DestinationIsIpv6": "false",
+        "DestinationIp": dest_ip,
+        "DestinationHostname": dest_host,
+        "DestinationPort": port,
+        "DestinationPortName": "https" if port == "443" else "http",
+    }
+    return _make_event(record_id, ts, "Sysmon", 3, host, _SYSMON_PROVIDER, event_data)
+
+
+_WU_DOMAINS = [
+    ("update.microsoft.com", "23.203.6.140"),
+    ("ctldl.windowsupdate.com", "13.107.4.52"),
+    ("download.windowsupdate.com", "13.107.4.50"),
+    ("sls.update.microsoft.com", "20.190.128.17"),
+]
+
+
+def windows_update(host, user, ts, record_id_start):
+    """Correlated Windows Update burst: DNS → connect → file write (3 events)."""
+    domain, ip = random.choice(_WU_DOMAINS)
+    svchost = r"C:\Windows\System32\svchost.exe"
+    proc_guid = _guid()
+    proc_id = _pid()
+
+    dns_data = {
+        "RuleName": "-",
+        "UtcTime": format_system_time(ts),
+        "ProcessGuid": proc_guid,
+        "ProcessId": proc_id,
+        "QueryName": domain,
+        "QueryStatus": "0",
+        "QueryResults": f"type:  1 {ip};",
+        "Image": svchost,
+        "User": "NT AUTHORITY\\SYSTEM",
+    }
+
+    net_ts = ts + timedelta(seconds=random.randint(1, 2))
+    net_data = {
+        "RuleName": "-",
+        "UtcTime": format_system_time(net_ts),
+        "ProcessGuid": proc_guid,
+        "ProcessId": proc_id,
+        "Image": svchost,
+        "User": "NT AUTHORITY\\SYSTEM",
+        "Protocol": "tcp",
+        "Initiated": "true",
+        "SourceIsIpv6": "false",
+        "SourceIp": host.ip,
+        "SourceHostname": host.fqdn,
+        "SourcePort": str(random.randint(49152, 65535)),
+        "SourcePortName": "-",
+        "DestinationIsIpv6": "false",
+        "DestinationIp": ip,
+        "DestinationHostname": domain,
+        "DestinationPort": "443",
+        "DestinationPortName": "https",
+    }
+
+    file_ts = ts + timedelta(seconds=random.randint(3, 5))
+    file_data = {
+        "RuleName": "-",
+        "UtcTime": format_system_time(file_ts),
+        "ProcessGuid": proc_guid,
+        "ProcessId": proc_id,
+        "Image": svchost,
+        "TargetFilename": rf"C:\Windows\SoftwareDistribution\Download\{_rand_hex(16)}.tmp",
+        "CreationUtcTime": format_system_time(file_ts),
+        "User": "NT AUTHORITY\\SYSTEM",
+    }
+
+    return [
+        _make_event(record_id_start, ts, "Sysmon", 22, host, _SYSMON_PROVIDER, dns_data),
+        _make_event(record_id_start + 1, net_ts, "Sysmon", 3, host, _SYSMON_PROVIDER, net_data),
+        _make_event(record_id_start + 2, file_ts, "Sysmon", 11, host, _SYSMON_PROVIDER, file_data),
+    ]
+
+
 # ── Noise injection orchestrator ──────────────────────────────────────────────
 
 def generate(
@@ -304,13 +501,28 @@ def generate(
 ) -> list[GeneratedEvent]:
     """Generate all noise events for a single NoiseSpec entry.
 
-    Events are scattered randomly within [base_time, base_time + spread_minutes].
-    Returns them sorted by timestamp. The caller assigns final record IDs.
+    When noise_profile is set, preset defaults fill fields left at 0.
+    Events are distributed using the temporal profile's weight curve.
     """
-    events: list[GeneratedEvent] = []
-    spread_seconds = noise_spec.spread_minutes * 60
+    from artiforge.generators.noise_profiles import resolve_counts, sample_timestamp
 
-    # Choose a realistic user for noise (first user on host, or SYSTEM)
+    events: list[GeneratedEvent] = []
+
+    counts = resolve_counts(
+        noise_profile=noise_spec.noise_profile,
+        logon_pairs=noise_spec.logon_pairs,
+        process_spawns=noise_spec.process_spawns,
+        dns_queries=noise_spec.dns_queries,
+        file_operations=noise_spec.file_operations,
+        registry_operations=noise_spec.registry_operations,
+        service_changes=noise_spec.service_changes,
+        network_connections=noise_spec.network_connections,
+        windows_updates=noise_spec.windows_updates,
+    )
+
+    profile = noise_spec.noise_profile
+    spread = noise_spec.spread_minutes
+
     if host.users:
         noise_user = host.users[0]
     else:
@@ -318,24 +530,47 @@ def generate(
 
     rid = record_id_start
 
-    # Logon/logoff pairs
-    for _ in range(noise_spec.logon_pairs):
-        ts = base_time + timedelta(seconds=random.randint(0, spread_seconds))
+    for _ in range(counts["logon_pairs"]):
+        ts = sample_timestamp(base_time, spread, profile)
         pair = logon_pair(host, noise_user, ts, rid)
         events.extend(pair)
         rid += len(pair)
 
-    # Process spawns
-    for _ in range(noise_spec.process_spawns):
-        ts = base_time + timedelta(seconds=random.randint(0, spread_seconds))
+    for _ in range(counts["process_spawns"]):
+        ts = sample_timestamp(base_time, spread, profile)
         events.append(process_spawn(host, noise_user, ts, rid))
         rid += 1
 
-    # DNS queries
-    for _ in range(noise_spec.dns_queries):
-        ts = base_time + timedelta(seconds=random.randint(0, spread_seconds))
+    for _ in range(counts["dns_queries"]):
+        ts = sample_timestamp(base_time, spread, profile)
         events.append(dns_query(host, noise_user, ts, rid))
         rid += 1
+
+    for _ in range(counts["file_operations"]):
+        ts = sample_timestamp(base_time, spread, profile)
+        events.append(file_operation(host, noise_user, ts, rid))
+        rid += 1
+
+    for _ in range(counts["registry_operations"]):
+        ts = sample_timestamp(base_time, spread, profile)
+        events.append(registry_operation(host, noise_user, ts, rid))
+        rid += 1
+
+    for _ in range(counts["service_changes"]):
+        ts = sample_timestamp(base_time, spread, profile)
+        events.append(service_change(host, noise_user, ts, rid))
+        rid += 1
+
+    for _ in range(counts["network_connections"]):
+        ts = sample_timestamp(base_time, spread, profile)
+        events.append(network_connection(host, noise_user, ts, rid))
+        rid += 1
+
+    for _ in range(counts["windows_updates"]):
+        ts = sample_timestamp(base_time, spread, profile)
+        wu_events = windows_update(host, noise_user, ts, rid)
+        events.extend(wu_events)
+        rid += len(wu_events)
 
     events.sort(key=lambda e: e.timestamp)
     return events

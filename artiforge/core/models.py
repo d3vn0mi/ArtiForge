@@ -31,6 +31,7 @@ class Host(BaseModel):
     ip: str
     fqdn: str
     os: str = "Windows 10"
+    platform: str = "windows"
     sid_prefix: str = "S-1-5-21-1111111111-2222222222-3333333333"
     users: list[User] = Field(default_factory=list)
 
@@ -67,6 +68,12 @@ class NoiseSpec(BaseModel):
     logon_pairs: int = Field(default=0, ge=0)
     process_spawns: int = Field(default=0, ge=0)
     dns_queries: int = Field(default=0, ge=0)
+    file_operations: int = Field(default=0, ge=0)
+    registry_operations: int = Field(default=0, ge=0)
+    service_changes: int = Field(default=0, ge=0)
+    network_connections: int = Field(default=0, ge=0)
+    windows_updates: int = Field(default=0, ge=0)
+    noise_profile: str | None = None
 
 
 # ── Attack specification ───────────────────────────────────────────────────────
@@ -84,6 +91,8 @@ class EventSpec(BaseModel):
     repeat_gap_seconds: int = Field(default=30, ge=0)
     jitter_seconds: int = Field(default=0, ge=0)        # ±N second timestamp jitter
     repeat_jitter_seconds: int = Field(default=0, ge=0)  # ±N jitter between repeats
+    session: str | None = None       # correlation session label
+    process: str | None = None       # correlation process label
 
 
 class FileArtifactSpec(BaseModel):
@@ -95,6 +104,11 @@ class FileArtifactSpec(BaseModel):
     lnk_args: str | None = None
 
 
+class ValidationSpec(BaseModel):
+    """Per-phase validation configuration."""
+    suppress: list[str] = Field(default_factory=list)
+
+
 class Phase(BaseModel):
     id: int
     name: str
@@ -104,6 +118,7 @@ class Phase(BaseModel):
     user: str | None = None         # default user for events in this phase
     events: list[EventSpec] = Field(default_factory=list)
     file_artifacts: list[FileArtifactSpec] = Field(default_factory=list)
+    validation: ValidationSpec | None = None
 
 
 class AttackSpec(BaseModel):
@@ -111,6 +126,7 @@ class AttackSpec(BaseModel):
     malicious_account: str = "svc_backup_admin"
     phases: list[Phase] = Field(default_factory=list)
     noise: list[NoiseSpec] = Field(default_factory=list)
+    forensic_artifacts: bool = False
 
 
 class LabMeta(BaseModel):

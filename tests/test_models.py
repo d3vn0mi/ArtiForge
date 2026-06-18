@@ -122,3 +122,43 @@ def test_uc3_lab_has_schema_version():
     from artiforge.core import engine
     spec = engine.load_lab("uc3")
     assert spec.lab.lab_schema_version == "1"
+
+
+# ── v0.7: EventSpec session/process labels ───────────────────────────────
+
+def test_event_spec_session_label_defaults_none():
+    from artiforge.core.models import EventSpec
+    ev = EventSpec(channel="Security", eid=4624)
+    assert ev.session is None
+
+
+def test_event_spec_session_label_set():
+    from artiforge.core.models import EventSpec
+    ev = EventSpec(channel="Security", eid=4624, session="admin_session")
+    assert ev.session == "admin_session"
+
+
+def test_event_spec_process_label_defaults_none():
+    from artiforge.core.models import EventSpec
+    ev = EventSpec(channel="Sysmon", eid=1)
+    assert ev.process is None
+
+
+def test_event_spec_process_label_set():
+    from artiforge.core.models import EventSpec
+    ev = EventSpec(channel="Sysmon", eid=1, process="mimikatz")
+    assert ev.process == "mimikatz"
+
+
+# ── v0.7: Phase validation spec ─────────────────────────────────────────
+
+def test_phase_validation_defaults_none():
+    from artiforge.core.models import Phase
+    p = Phase(id=1, name="test")
+    assert p.validation is None
+
+
+def test_phase_validation_suppress():
+    from artiforge.core.models import Phase, ValidationSpec
+    p = Phase(id=1, name="test", validation=ValidationSpec(suppress=["session-before-activity"]))
+    assert "session-before-activity" in p.validation.suppress

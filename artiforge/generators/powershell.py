@@ -76,17 +76,82 @@ def eid_4104(fields: dict, host: Host, user: User | None, timestamp: Any, **_) -
     }
 
 
+# ── EID 4105 — Script Start ───────────────────────────────────────────────────
+
+def eid_4105(fields: dict, host: Host, user: User | None, timestamp: Any, **_) -> dict:
+    return {
+        "SequenceNumber": str(fields.get("SequenceNumber", "1")),
+        "HostName": fields.get("HostName", "ConsoleHost"),
+        "HostVersion": fields.get("HostVersion", "5.1.19041.1"),
+        "HostId": fields.get("HostId", _script_block_id()),
+        "HostApplication": fields.get("HostApplication", "powershell.exe"),
+        "EngineVersion": fields.get("EngineVersion", "5.1.19041.1"),
+        "RunspaceId": fields.get("RunspaceId", _script_block_id()),
+        "ScriptName": fields.get("ScriptName", ""),
+        "CommandLine": fields.get("CommandLine", ""),
+    }
+
+
+# ── EID 4106 — Script Stop ────────────────────────────────────────────────────
+
+def eid_4106(fields: dict, host: Host, user: User | None, timestamp: Any, **_) -> dict:
+    return {
+        "SequenceNumber": str(fields.get("SequenceNumber", "1")),
+        "HostName": fields.get("HostName", "ConsoleHost"),
+        "HostVersion": fields.get("HostVersion", "5.1.19041.1"),
+        "HostId": fields.get("HostId", _script_block_id()),
+        "HostApplication": fields.get("HostApplication", "powershell.exe"),
+        "EngineVersion": fields.get("EngineVersion", "5.1.19041.1"),
+        "RunspaceId": fields.get("RunspaceId", _script_block_id()),
+        "ScriptName": fields.get("ScriptName", ""),
+        "CommandLine": fields.get("CommandLine", ""),
+    }
+
+
+# ── EID 40961 — Engine Start ──────────────────────────────────────────────────
+
+def eid_40961(fields: dict, host: Host, user: User | None, timestamp: Any, **_) -> dict:
+    return {
+        "HostName": fields.get("HostName", "ConsoleHost"),
+        "HostVersion": fields.get("HostVersion", "5.1.19041.1"),
+        "HostId": fields.get("HostId", _script_block_id()),
+        "HostApplication": fields.get("HostApplication", "powershell.exe"),
+        "EngineVersion": fields.get("EngineVersion", "5.1.19041.1"),
+        "RunspaceId": fields.get("RunspaceId", _script_block_id()),
+    }
+
+
+# ── EID 40962 — Engine Stop ───────────────────────────────────────────────────
+
+def eid_40962(fields: dict, host: Host, user: User | None, timestamp: Any, **_) -> dict:
+    return {
+        "HostName": fields.get("HostName", "ConsoleHost"),
+        "HostVersion": fields.get("HostVersion", "5.1.19041.1"),
+        "HostId": fields.get("HostId", _script_block_id()),
+        "HostApplication": fields.get("HostApplication", "powershell.exe"),
+        "EngineVersion": fields.get("EngineVersion", "5.1.19041.1"),
+        "RunspaceId": fields.get("RunspaceId", _script_block_id()),
+    }
+
+
 # ── Dispatcher ────────────────────────────────────────────────────────────────
 
 _GENERATORS = {
     4103: eid_4103,
     4104: eid_4104,
+    4105: eid_4105,
+    4106: eid_4106,
+    40961: eid_40961,
+    40962: eid_40962,
 }
 
 
 def generate(eid: int, fields: dict, host: Host, user: User | None,
-             spec: Any, timestamp: Any) -> dict:
+             spec: Any, timestamp: Any, ctx: Any = None,
+             session_label: str = "default",
+             process_label: str = "default") -> dict:
     fn = _GENERATORS.get(eid)
     if fn is None:
         raise ValueError(f"PowerShell EID {eid} not implemented.")
-    return fn(fields=fields, host=host, user=user, spec=spec, timestamp=timestamp)
+    return fn(fields=fields, host=host, user=user, spec=spec, timestamp=timestamp,
+              ctx=ctx, session_label=session_label, process_label=process_label)

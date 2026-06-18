@@ -2,8 +2,9 @@
 
 > Maintained by [D3vn0mi](https://github.com/D3vn0mi)
 
-This document tracks planned improvements across five dimensions:
-event coverage, realism, lab ecosystem, MITRE integration, and distribution.
+This document tracks planned improvements across seven dimensions:
+event coverage, event correlation, realism, export formats, cross-platform
+support, lab ecosystem, and distribution.
 Items within each milestone are roughly ordered by priority.
 
 ---
@@ -134,26 +135,101 @@ Better guardrails for scenario authors.
 
 ---
 
-## v0.9 — Distribution
+## v0.7 — Event Correlation & Coverage Expansion ✓
 
-- [ ] PyPI package (`pip install artiforge`)
-- [ ] GitHub Actions CI: test matrix across Python 3.10/3.11/3.12
-- [ ] Pre-built Docker image on GitHub Container Registry (`ghcr.io/d3vn0mi/artiforge`)
-- [ ] Signed releases with checksums
+### Event Correlation Engine
+- [x] `CorrelationContext` per (phase, host) — tracks `LogonId`, `LogonGuid`,
+  `ProcessGuid`, and `TargetLogonId` across related events
+- [x] Three-tier field precedence: YAML fields > correlation > random default
+- [x] `session` and `process` labels on EventSpec for multi-session scenarios
+- [x] Realistic PID ranges (multiples of 4, categorized by process type)
+
+### Expanded Event Coverage
+- [x] **Security:** 1102, 4697, 4703, 4719, 4735 (5 new EIDs)
+- [x] **Sysmon:** 6, 15, 16, 24, 26 (5 new EIDs)
+- [x] **System:** 7031, 7034 (2 new EIDs)
+- [x] **PowerShell:** 4105, 4106, 40961, 40962 (4 new EIDs)
+
+### Event Sequence Validation
+- [x] Correlation-aware `--strict` checks: ProcessGuid matching, orphan logoff
+  detection, session-before-activity
 
 ---
 
-## v1.0 — Scenario Library
+## v0.8 — Export Formats & Detection Standards ✓
 
-A standalone tool is useful; a curated library is a training platform.
+### Binary EVTX Export (evtxforge)
+- [x] Pure-Python `evtxforge` library (`libs/evtxforge/`) — zero dependencies
+- [x] `--format evtx` producing valid `.evtx` files (file header, chunks,
+  BinXML event records, CRC32 checksums)
+- [x] One `.evtx` file per host/channel pair
 
-- [ ] UC4 — Kerberoasting + Pass-the-Hash lateral movement
-- [ ] UC5 — Supply chain: malicious npm package → C2 beacon
-- [ ] UC6 — Ransomware: file encryption + shadow copy deletion
-- [ ] UC7 — Insider threat: data staging + USB exfiltration
-- [ ] UC8 — Living-off-the-land: wmic/mshta/regsvr32 chains
-- [ ] UC9 — Cloud pivot: IMDS credential theft + lateral to S3
-- [ ] UC10 — Active Directory: DCSync + Golden Ticket
+### Lightweight Sigma Rule Evaluator
+- [x] Custom Sigma YAML evaluator — no pySigma dependency, ~80% syntax coverage
+- [x] Supports selections, modifiers (contains/startswith/endswith/all),
+  wildcards, conditions (and/or/not, 1 of, all of)
+- [x] `artiforge check --sigma-dir ./rules/ --sigma-only`
+- [x] Auto-discovery of `sigma/` directory in lab folders
+- [x] 3 starter Sigma rules shipped with UC3
+
+---
+
+## v0.9 — Realism & Cross-Platform ✓
+
+### Realistic Noise Engine v2
+- [x] 5 new noise categories: file operations (Sysmon 11), registry writes
+  (Sysmon 13), service start/stop (System 7036), network connections
+  (Sysmon 3), Windows Update traffic (correlated DNS + HTTP + file burst)
+- [x] 3 temporal profiles: `office_hours`, `24x7_server`,
+  `developer_workstation` with hour-weighted distribution curves
+- [x] `noise_profile` preset system with per-field overrides
+
+### Linux Auditd Channel
+- [x] `platform` field on Host (`"windows"` | `"linux"`, backward-compatible)
+- [x] 7 auditd record type generators: SYSCALL, EXECVE, PATH, SOCKADDR,
+  USER_AUTH, USER_LOGIN, CRED_ACQ
+- [x] String EID aliases in lab YAML (`eid: USER_AUTH`)
+- [x] Raw `audit.log` exporter (`--format auditd`)
+- [x] ECS-mapped NDJSON output matching Auditbeat schema
+- [x] Mixed Windows + Linux hosts in the same lab
+
+---
+
+## v1.0 — Filesystem Artifact Generation
+
+Cross-artifact correlation: event logs tell one story, filesystem artifacts
+confirm it. Trainees learn to corroborate findings across evidence sources.
+
+### Filesystem Artifact Generation
+- [ ] Prefetch files (`.pf`) with execution counts, timestamps, and referenced
+  DLLs — correlated with Sysmon 1 process creation events
+- [ ] Amcache registry hive entries for executed binaries
+- [ ] $MFT stub records (filename, timestamps, parent directory) for key
+  attack-path files
+- [ ] Cross-artifact correlation: if Sysmon 1 says `mimikatz.exe` ran, the
+  Prefetch and Amcache entries confirm it
+
+---
+
+## Backlog
+
+Items deferred from earlier milestones. Will be prioritized as needed.
+
+- [ ] **Multi-Timezone & Locale** — per-host timezone field, local time
+  rendering in exports (deferred from v0.9 — low value without multi-region labs)
+- [ ] **Splunk CIM / HEC Export** — `--format splunk` with CIM field mapping
+  (deferred from v0.8 — Elastic covers most cohorts)
+- [ ] **Noise correlation via CorrelationContext** — noise events currently use
+  independent GUIDs/PIDs (deferred from v0.7)
+- [ ] **Cross-phase correlation** — `continues_session` directive to carry
+  session state across phases (deferred from v0.7)
+- [ ] **Template-based BinXML** in evtxforge — for python-evtx readback
+  compatibility (current inline BinXML works with Chainsaw/Hayabusa)
+- [ ] **Scenario Library** — UC4 (Kerberoasting), UC5 (Supply Chain),
+  UC6 (Ransomware), UC7 (Insider Threat), UC8 (LOLBins), UC9 (Cloud Pivot),
+  UC10 (AD: DCSync + Golden Ticket)
+- [ ] **Distribution** — PyPI package, GitHub Actions CI, pre-built Docker
+  image on GHCR, signed releases
 
 ---
 

@@ -72,8 +72,65 @@ def _phase_colour(phase_id: int) -> str:
 
 @app.route("/")
 def index():
-    labs = engine.list_labs()
+    labs = _load_lab_summaries()
     return render_template("index.html", labs=labs, now=datetime.now(timezone.utc))
+
+
+def _load_lab_summaries() -> list[dict]:
+    """Load rich summaries for all labs — hosts, techniques, phases, noise config."""
+    from pathlib import Path
+
+    result = []
+    labs_root = Path(__file__).parent.parent / "labs"
+    for yaml_path in sorted(labs_root.glob("*/lab.yaml")):
+        if yaml_path.parent.name.startswith("_"):
+            continue
+        try:
+            spec = engine.load_lab(yaml_path.parent.name)
+            phases = spec.attack.phases
+            event_count = sum(e.repeat for p in phases for e in p.events)
+            techniques = sorted({tid for p in phases for tid in p.mitre})
+            hosts = list(spec.infrastructure.hosts.keys())
+            channels = sorted({e.channel for p in phases for e in p.events})
+
+            # Noise summary
+            has_noise = bool(spec.attack.noise)
+            noise_profile = None
+            if has_noise:
+                profiles = [n.noise_profile for n in spec.attack.noise if n.noise_profile]
+                noise_profile = profiles[0] if profiles else None
+
+            # Forensic artifacts
+            has_forensics = getattr(spec.attack, "forensic_artifacts", False)
+
+            # Sigma rules
+            sigma_dir = yaml_path.parent / "sigma"
+            sigma_count = len(list(sigma_dir.glob("*.yml"))) if sigma_dir.is_dir() else 0
+
+            # Timeline span
+            time_span = 0
+            if phases:
+                time_span = max(p.offset_minutes for p in phases)
+
+            result.append({
+                "id": spec.lab.id,
+                "name": spec.lab.name,
+                "description": spec.lab.description,
+                "phases": len(phases),
+                "events": event_count,
+                "hosts": hosts,
+                "techniques": techniques,
+                "channels": channels,
+                "has_noise": has_noise,
+                "noise_profile": noise_profile,
+                "has_forensics": has_forensics,
+                "sigma_count": sigma_count,
+                "time_span": time_span,
+                "domain": spec.infrastructure.domain,
+            })
+        except Exception as exc:
+            result.append({"id": yaml_path.parent.name, "error": str(exc)})
+    return result
 
 
 @app.route("/lab/<lab_id>")
@@ -81,7 +138,8 @@ def lab_detail(lab_id: str):
     try:
         spec = engine.load_lab(lab_id)
     except FileNotFoundError:
-        return render_template("error.html", message=f"Lab '{lab_id}' not found."), 404
+        return render_template("error.html", message=f"Lab '{lab_id}' not found.",
+                               now=datetime.now(timezone.utc)), 404
 
     seed  = request.args.get("seed",   None,  type=int)
     jitter = request.args.get("jitter", 0,     type=int)
@@ -147,4 +205,4 @@ def lab_detail(lab_id: str):
 
 @app.errorhandler(404)
 def not_found(e):
-    return render_template("error.html", message="Page not found."), 404
+    return render_template("error.html", message="Page not found.", now=datetime.now(timezone.utc)), 404
